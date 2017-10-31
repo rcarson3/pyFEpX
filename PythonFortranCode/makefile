@@ -1,0 +1,40 @@
+CFLAGS	  =
+FFLAGS    =
+CPPFLAGS  =
+FPPFLAGS  =
+SOURCEF   = 
+LOCDIR    = ~/Source/PythonFortranCode
+
+include Sources.mk
+include Rules-fortran.mk
+include ModuleDependencies.mk
+
+FOPTS = -O3 -funroll-loops -ftree-vectorize -m64 -fPIC
+
+F90 = gfortran
+F90FLAGS = $(FOPTS) -JModules -IModules
+f2py = f2py -c --fcompiler=gnu95 -L. -l$(LIBBASE) -IModules
+
+default:  $(LIBRARY)
+#
+$(LIBRARY): Modules $(f90OBJECTS) $(mOBJECTS)
+	ar crs $@ $(f90OBJECTS) $(mOBJECTS)
+	rm -r *.o
+
+python: mainLatProgram.f90
+	$(f2py) mainLatProgram.f90 -m latorifem
+#	cp latorifem.so ~/Research_Local_Code/PythonScripts/
+
+Modules: force
+	mkdir -p Modules
+#
+# Need to define "DIRT" for "clean" target
+#
+DIRT=$(LIBRARY) Modules/*.mod
+
+debug:
+	@echo Fortran linker  $(F90)
+	@echo Fortran lib  $(PETSC_KSP_LIB)
+	@echo f90objects $(f90OBJECTS)
+	@echo Library $(LIBRARY)
+	@echo python $(f2py3)

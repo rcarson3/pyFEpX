@@ -1,0 +1,1 @@
+/home/robert/anaconda3/envs/pyintel/lib/python3.6/site-packages/evtk-1.0.1-py3.6.egg

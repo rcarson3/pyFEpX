@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Aug 20 15:20:49 2017
+
+@author: robertcarson
+"""
+
+import numpy as np
+import FePX_Data_and_Mesh as fepxDM
+import FiniteElement as fe
+#from latorifem import mainlatprogram as latfem
+#import Rotations as rot
+import Misori as mis
+#%%
+fileLoc = '/Users/robertcarson/Research_Local_Code/Output/LOFEM_STUDY/n456_cent/low/'
+fileLoc = '/media/robert/My Passport for Mac/Simulations/LOFEM_Study/n456_nf_c03/low_txt/'
+#fileLoc = '/media/robert/DataDrives/LOFEM_Study/n456_NF/mono/low_txt/'
+#fileName = 'n456-cent-rcl05'
+fileName = 'n456_nf_raster_L2_r1_v2_rcl075'
+fBname = 'grainData'
+
+nproc = 64
+nsteps = 52
+
+frames = np.arange(0,nsteps)
+
+mesh = fepxDM.readMesh(fileLoc,fileName)
+
+ngrains = 456
+
+grains = np.r_[1:(ngrains+1)]
+
+misoriD = np.zeros((mesh['grains'].shape[0], nsteps))
+
+#%%
+
+print('About to start processing data')
+kor = 'rod'
+ldata = fepxDM.readLOFEMData(fileLoc, nproc, lofemData=['strain'])
+print('Finished Reading LOFEM data')
+print('Starting to read DISC data')
+data = fepxDM.readData(fileLoc, nproc, fepxData=['ang', 'adx', 'strain'])
+print('Finished Reading DISC data')
+
+#%%
+
+gconn = np.asarray([], dtype='float64')
+gconn = np.atleast_2d(gconn)
+gupts = np.asarray([], dtype=np.int32)
+guelem = np.asarray([], dtype=np.int32)
+
+se_bnds = np.zeros((ngrains*2), dtype='int32')
+se_el_bnds = np.zeros((ngrains*2), dtype='int32')
+
+st_bnd = 0
+en_bnd = 0
+
+st_bnd2 = 0
+en_bnd2 = 0
+
+for i in grains:
+    
+    lcon, lcrd, lupts, luelem = fe.localConnectCrd(mesh, i)
+    st_bnd = en_bnd
+    en_bnd = st_bnd + lupts.shape[0]
+    
+    j = (i - 1) * 2
+    
+    se_bnds[j] = st_bnd
+    se_bnds[j+1] = en_bnd
+    
+    st_bnd2 = en_bnd2
+    en_bnd2 = st_bnd2 + luelem.shape[0]
+    
+    j = (i - 1) * 2
+    
+    se_el_bnds[j] = st_bnd2
+    se_el_bnds[j+1] = en_bnd2
+    
+    gconn, gupts, guelem = fe.concatConnArray(gconn, lcon, gupts, lupts, guelem, luelem) 
+
+npts = gupts.shape[0]
+nelem = guelem.shape[0]
+
+#%%
+  
+gr_angs = np.zeros((1, npts,  nsteps), dtype='float64')
+disc_angs = np.zeros((1, nelem,  nsteps), dtype='float64')
+
+origin = np.zeros((3,1), dtype='float64')
+#
+#
+#for i in grains:
+#    print('###### Starting Grain Number '+str(i)+' ######')
+#    gdata = fepxDM.readGrainData(fileLoc, i, frames=None, grData=['ang'])
+#    lcon, lcrd, ucon, uelem = fe.localConnectCrd(mesh, i)
+#    indlog = mesh['grains'] == i
+#       
+#    lmisAngs, lmisQuats = mis.misorientationGrain(mesh['kocks'][:,i-1], gdata['angs'], frames, kor)
+#    stats = mis.misorientationTensor(lmisQuats, lcrd, lcon, data['coord'][:, ucon, :], i, True)
+#    lmisAngs, lmisQuats = mis.misorientationGrain(origin, stats['wi'], frames, kor, True)
+    
+#    misAngs, misQuats = mis.misorientationGrain(mesh['kocks'][:,i-1], data['angs'][:,indlog,:], frames, 'kocks')
+#    stats = mis.misorientationTensor(misQuats, lcrd, lcon, data['coord'][:, ucon, :], i, False)
+#    misAngs, misQuats = mis.misorientationGrain(origin, stats['wi'], frames, kor, True)
+#    
+#    j = (i - 1) * 2
+#    k = j + 2
+#    
+#    ind = se_bnds[j:k]
+#    ind2 = se_el_bnds[j:k]
+#    
+#    gr_angs[:, ind[0]:ind[1], :] = lmisAngs
+#    disc_angs[:, ind2[0]:ind2[1], :] = misAngs
+#
+#%%
+
+for i in grains:
+    print('###### Starting Grain Number '+str(i)+' ######')
+    
+    gdata = fepxDM.readGrainData(fileLoc, i, frames=None, grData=['ang'])
+    
+    lmisAngs, lmisQuats = mis.misorientationGrain(mesh['kocks'][:,i-1], gdata['angs'], frames, kor)
+    
+    lcon, lcrd, ucon, uelem = fe.localConnectCrd(mesh, i)
+    
+    nel = lcon.shape[1]
+    
+    indlog = mesh['grains'] == i
+    
+    misAngs, misQuats = mis.misorientationGrain(mesh['kocks'][:,i-1], data['angs'][:,indlog,:], frames, 'kocks')
+
+    defgrad = np.swapaxes(np.tile(np.atleast_3d(np.identity(3)), (1,1,nel)), 0, 2)
+
+    ncrd = lcrd.shape[1]
+    ngdot = 12
+    ncvec = ncrd*3
+    dim = 3
+    nnpe = 9
+    kdim1 = 29
+    
+    deflist = []
+    ldeflist = []
+    el_angs = np.zeros((3,nel,nsteps))
+    
+    diff_misQuats = np.zeros((4,nel,nsteps))
+    
+    for j in range(nsteps):
+        
+        el_angs[:,:,j] = fe.elem_fe_cen_val(gdata['angs'][:,:,j], lcon)
+
+    lemisAngs, lemisQuats = mis.misorientationGrain(mesh['kocks'][:,i-1], el_angs, frames, kor)
+        
+    for j in range(nsteps):
+        #Getting misorientation between the lofem and disc elements
+#        tel_angs = rot.OrientConvert(el_angs[:,:,j], 'rod', 'kocks', 'degrees', 'degrees')
+        temp2, tempQ = mis.misorientationGrain(data['angs'][:,indlog, j], el_angs[:,:,j], [0], kor)
+        diff_misQuats[:,:,j] = np.squeeze(tempQ)
+        misoriD[indlog, j] = np.squeeze(temp2)
+        
+        crd = np.squeeze(data['coord'][:,ucon, j])
+        
+        epsVec = np.squeeze(ldata['strain'][:, :, j]).T
+        strain = fepxDM.fixStrain(epsVec)
+        
+        vol, wts = fe.calcVol(crd, lcon)
+        
+        ldefdata = fe.deformationStats(defgrad, wts, crd, lcon, lemisQuats[:, :, j], el_angs[:,:,j], strain, kor)
+        ldeflist.append(ldefdata)
+        
+        epsVec = np.squeeze(data['strain'][:, :, j]).T
+        strain = fepxDM.fixStrain(epsVec)
+        
+        defdata = fe.deformationStats(defgrad, wts, crd, lcon, misQuats[:, :, j], data['angs'][:, indlog, j], strain, 'kocks')
+        deflist.append(defdata)
+        
+        print('Grain #'+str(i)+'% done:  {:.3f}'.format(((j+1)/nsteps)))
+
+    with open(fileLoc+fBname+'LOFEM'+'.vespread','ab') as f_handle:
+        f_handle.write(bytes('%Grain number'+str(i)+'\n','UTF-8'))
+        for j in range(nsteps):
+            np.savetxt(f_handle,ldeflist[j]['veSpread'])
+    
+    with open(fileLoc+fBname+'DISC'+'.vespread','ab') as f_handle:
+        f_handle.write(bytes('%Grain number'+str(i)+'\n','UTF-8'))
+        for j in range(nsteps):
+            np.savetxt(f_handle,deflist[j]['veSpread'])
+            
+    with open(fileLoc+fBname+'LOFEM'+'.fespread','ab') as f_handle:
+        f_handle.write(bytes('%Grain number'+str(i)+'\n','UTF-8'))
+        for j in range(nsteps):
+            np.savetxt(f_handle,ldeflist[j]['feSpread'])
+    
+    with open(fileLoc+fBname+'DISC'+'.fespread','ab') as f_handle:
+        f_handle.write(bytes('%Grain number'+str(i)+'\n','UTF-8'))
+        for j in range(nsteps):
+            np.savetxt(f_handle,deflist[j]['feSpread'])
+    
+    stats = mis.misorientationTensor(lmisQuats, lcrd, lcon, data['coord'][:, ucon, :], i, True)
+    lmisAngs, lmisQuats = mis.misorientationGrain(origin, stats['wi'], frames, kor, True)
+    
+    with open(fileLoc+fBname+'LOFEM'+'.misori','ab') as f_handle:
+        f_handle.write(bytes('%Grain number '+str(i)+'\n','UTF-8'))
+        np.savetxt(f_handle,stats['gSpread'])
+    
+    stats = mis.misorientationTensor(misQuats, lcrd, lcon, data['coord'][:, ucon, :], i, False)
+    misAngs, misQuats = mis.misorientationGrain(origin, stats['wi'], frames, kor, True)
+    
+    with open(fileLoc+fBname+'DISC'+'.misori','ab') as f_handle:
+        f_handle.write(bytes('%Grain number '+str(i)+'\n','UTF-8'))
+        np.savetxt(f_handle,stats['gSpread'])
+        
+    stats = mis.misorientationTensor(lemisQuats, lcrd, lcon, data['coord'][:, ucon, :], i, False)
+    
+    with open(fileLoc+fBname+'LOFEM_ELEM'+'.misori','ab') as f_handle:
+        f_handle.write(bytes('%Grain number '+str(i)+'\n','UTF-8'))
+        np.savetxt(f_handle,stats['gSpread'])
+    
+    stats = mis.misorientationTensor(diff_misQuats, lcrd, lcon, data['coord'][:, ucon, :], i, False)
+    with open(fileLoc+fBname+'DIFF_LOFEM'+'.misori','ab') as f_handle:
+        f_handle.write(bytes('%Grain number '+str(i)+'\n','UTF-8'))
+        np.savetxt(f_handle,stats['gSpread'])
+        
+    l = (i - 1) * 2
+    k = l + 2
+    
+    ind = se_bnds[l:k]
+    ind2 = se_el_bnds[l:k]
+    
+    gr_angs[:, ind[0]:ind[1], :] = lmisAngs
+    disc_angs[:, ind2[0]:ind2[1], :] = misAngs
+        
+#%%
+
+with open(fileLoc+fBname+'diff'+'.emisori','ab') as f_handle:
+    for i in range(nsteps):
+        f_handle.write(bytes('%Step number '+str(i)+'\n','UTF-8'))
+        np.savetxt(f_handle, np.squeeze(misoriD[:, i]))
+
+
+#%%
+with open(fileLoc+fBname+'.cmisori','ab') as f_handle:
+    for i in range(nsteps):
+        f_handle.write(bytes('%Step number '+str(i)+'\n','UTF-8'))
+        np.savetxt(f_handle, np.squeeze(gr_angs[:, :, i]))
+        
+#%%
+with open(fileLoc+fBname+'_DISC'+'.cmisori','ab') as f_handle:
+    for i in range(nsteps):
+        f_handle.write(bytes('%Step number '+str(i)+'\n','UTF-8'))
+        np.savetxt(f_handle, np.squeeze(disc_angs[:, :, i]))
