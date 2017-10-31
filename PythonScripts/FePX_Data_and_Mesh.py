@@ -1,6 +1,6 @@
 import numpy as np
-import textadapter as ta
-#import iopro
+# import TextAdapter as ta
+import iopro
 import Utility as util
 
 '''
@@ -131,6 +131,50 @@ def mesh_node_conn(conn, nnode):
     
     return nd_conn
 
+def grain_conn_mesh(ndconn, conn, grains, nnode):
+    '''
+    Takes in the nodal and elemental connectivity arrays. It then goes through
+    the list of nodes and increments the node count for those in different grains
+    in the elemental connectivity array. It also will update all of the other
+    nodes by the most current incremental count.
+    
+    Input: ndconn = a list of sets for each node and what elems they are
+                connected to
+           conn = a numpy array of the mesh element connectivity array
+           grains = a numpy array corresponding to what grain each element is
+                in
+           nnode = the number of nodes in the mesh
+    Output: conn = a numpy array that is the updated connectivity array
+    '''
+    #We don't increment anything to start off with
+    incr = 0
+    nodes = np.zeros(10, dtype='int32')
+    #Really wish I didn't have to make a copy of this...
+    conn_orig = np.copy(conn)
+    
+    for i in range(nnode):
+        #We want a numpy array of all the elements connected to that node
+        ndelems =  np.array(list(ndconn[i]), dtype='int32')
+        #We also want to know how many unique grains we actually have
+        ugrns = np.unique(grains[ndelems])
+        #Our inner loop that were going to use to go through the data
+        for j in ndelems:
+            #First we get all the nodes
+            nodes[:] = conn_orig[:, j]
+            #Then we simply get the index of our node
+            ind = nodes == i
+            #Finally we increment the conn array
+            conn[ind, j] = incr + i + np.where(ugrns == grains[j])
+                  
+        #We don't need to increment anything if there is only one grain for
+        #that node
+        nincr = ugrns.shape[0] - 1
+        incr = incr + nincr
+      
+    
+    
+    return conn
+
 
 
 def wordParser(listVals):
@@ -214,7 +258,7 @@ def readData(fileLoc, nProc, frames=None, fepxData=None, restart=False):
             fLoc = fileLoc + 'post.' + fName + '.' + str(p)
 
             if frDflt:
-                tmp = ta.genfromtxt(fLoc, comments='%')
+                tmp = iopro.genfromtxt(fLoc, comments='%')
             else:
                 tmp = selectFrameTxt(fLoc, tFrames, comments='%')
 
@@ -260,6 +304,13 @@ def readData(fileLoc, nProc, frames=None, fepxData=None, restart=False):
         elif fName == 'eqplstrain':
             tName = 'plstrain'
             data[tName] = np.atleast_3d(temp)
+        elif fName == 'stress_q':
+            nvec = temp.shape[0]
+            nqpts = 15
+            nelems = np.int32(temp.shape[1]/nqpts)
+            temp1d = np.ravel(temp)
+            temp4d = temp1d.reshape(nvec, nelems, nqpts, nFrames)
+            data[fName] = np.swapaxes(np.swapaxes(temp4d, 0, 2), 1, 2)
 
         else:
             data[fName] = np.atleast_3d(temp)
@@ -324,7 +375,7 @@ def readGrainData(fileLoc, grainNum, frames=None, grData=None):
         fLoc = fileLoc + 'gr_' + fName + strgrnum + '.' + fend
 
         if frDflt:
-            tmp = ta.genfromtxt(fLoc, comments='%')
+            tmp = iopro.genfromtxt(fLoc, comments='%')
         else:
             tmp = selectFrameTxt(fLoc, tFrames, comments='%')
 
@@ -405,7 +456,7 @@ def readLOFEMData(fileLoc, nProc, nqpts=15, frames=None, lofemData=None):
             fLoc = fileLoc + 'lofem.' + fName + '.' + str(p)
 
             if frDflt:
-                tmp = ta.genfromtxt(fLoc, comments='%')
+                tmp = iopro.genfromtxt(fLoc, comments='%')
             else:
                 tmp = selectFrameTxt(fLoc, tFrames, comments='%')
 
@@ -449,7 +500,7 @@ def readLOFEMData(fileLoc, nProc, nqpts=15, frames=None, lofemData=None):
         elif fName == 'agamma':
             nslip = temp.shape[0]
             nqpts = 15
-            nelems = temp.shape[1]/nqpts
+            nelems = np.int32(temp.shape[1]/nqpts)
             temp1d = np.ravel(temp)
             temp4d = temp1d.reshape(nslip, nelems, nqpts, nFrames)
             data[fName] = np.swapaxes(np.swapaxes(temp4d, 0, 2), 1, 2)

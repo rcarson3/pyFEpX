@@ -4,6 +4,7 @@ import scipy as sci
 import Misori as mis
 import Rotations as rot
 import Utility as utl
+from scipy import optimize as sciop
 
 '''
 List of all functions available in this module
@@ -17,6 +18,10 @@ nearvertex(sigs, vert, nverts, xtalrot, wts)
 elem_fe_cen_val(crds, conn)
 surface_quad_tet()
 surfaceLoadArea(scrds, sconn, sig, wt2d, sfgdt)
+sfmat()
+gr_lstq_amat(conn, nsf, ncrds)
+gr_lstq_solver(amat, q_mat, ncrds)
+gr_nnlstq(amat, q_mat, ncrds)
 
 '''
 
@@ -705,7 +710,165 @@ def surfaceLoadArea(scrds, sconn, sig, wt2d, sfgdt):
     
     return (load, area)
     
+def sfmat():
+    '''
+    Outputs the shape function matrix for a 10 node tetrahedral element
+    Pretty much just using FEpX
+    Output: N - The isoparametric shape functions for all 15 quadrature points
+    '''
+    NDIM = 3
     
+    qp3d_ptr = np.zeros((NDIM*15))
     
+    qp3d_ptr[0] =  0.333333333333333333e0
+    qp3d_ptr[1 * NDIM] =  0.333333333333333333e0
+    qp3d_ptr[2 * NDIM] =  0.333333333333333333e0
+    qp3d_ptr[3 * NDIM] =  0.0e0
+    qp3d_ptr[4 * NDIM] =  0.25e0
+    qp3d_ptr[5 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[6 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[7 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[8 * NDIM] =  0.727272727272727273e0
+    qp3d_ptr[9 * NDIM] =  0.665501535736642813e-1
+    qp3d_ptr[10 * NDIM] = 0.665501535736642813e-1
+    qp3d_ptr[11 * NDIM] = 0.665501535736642813e-1
+    qp3d_ptr[12 * NDIM] = 0.433449846426335728e0
+    qp3d_ptr[13 * NDIM] = 0.433449846426335728e0
+    qp3d_ptr[14 * NDIM] = 0.433449846426335728e0
     
+    qp3d_ptr[1] =  0.333333333333333333e0
+    qp3d_ptr[1 + 1 * NDIM] =  0.333333333333333333e0
+    qp3d_ptr[1 + 2 * NDIM] =  0.0e0
+    qp3d_ptr[1 + 3 * NDIM] =  0.333333333333333333e0
+    qp3d_ptr[1 + 4 * NDIM] =  0.25e0
+    qp3d_ptr[1 + 5 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[1 + 6 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[1 + 7 * NDIM] =  0.727272727272727273e0
+    qp3d_ptr[1 + 8 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[1 + 9 * NDIM] =  0.665501535736642813e-1
+    qp3d_ptr[1 + 10 * NDIM] = 0.433449846426335728e0
+    qp3d_ptr[1 + 11 * NDIM] = 0.433449846426335728e0
+    qp3d_ptr[1 + 12 * NDIM] = 0.665501535736642813e-1
+    qp3d_ptr[1 + 13 * NDIM] = 0.665501535736642813e-1
+    qp3d_ptr[1 + 14 * NDIM] = 0.433449846426335728e0
+    
+    qp3d_ptr[2] =  0.333333333333333333e0
+    qp3d_ptr[2 + 1 * NDIM] =  0.0e0
+    qp3d_ptr[2 + 2 * NDIM] =  0.333333333333333333e0
+    qp3d_ptr[2 + 3 * NDIM] =  0.333333333333333333e0
+    qp3d_ptr[2 + 4 * NDIM] =  0.25e0
+    qp3d_ptr[2 + 5 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[2 + 6 * NDIM] =  0.727272727272727273e0
+    qp3d_ptr[2 + 7 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[2 + 8 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[2 + 9 * NDIM] =  0.433449846426335728e0
+    qp3d_ptr[2 + 10 * NDIM] = 0.665501535736642813e-1
+    qp3d_ptr[2 + 11 * NDIM] = 0.433449846426335728e0
+    qp3d_ptr[2 + 12 * NDIM] = 0.665501535736642813e-1
+    qp3d_ptr[2 + 13 * NDIM] = 0.433449846426335728e0
+    qp3d_ptr[2 + 14 * NDIM] = 0.665501535736642813e-1
+            
+    sfvec_ptr = np.zeros((10))
+    N = np.zeros((15,10))
+            
+    for i in range(15):
+        loc_ptr = qp3d_ptr[i*3:(i+1)*3]
+        sfvec_ptr[0] = 2.0e0 * (loc_ptr[0] + loc_ptr[1] + loc_ptr[2] - 1.0e0) * (loc_ptr[0] + loc_ptr[1] +loc_ptr[2] - 0.5e0)
+        sfvec_ptr[1] = -4.0e0 * (loc_ptr[0] + loc_ptr[1] + loc_ptr[2] - 1.0e0) * loc_ptr[0]
+        sfvec_ptr[2] = 2.0e0 * loc_ptr[0] * (loc_ptr[0] - 0.5e0)
+        sfvec_ptr[3] = 4.0e0 * loc_ptr[1] * loc_ptr[0]
+        sfvec_ptr[4] = 2.0e0 * loc_ptr[1] * (loc_ptr[1] - 0.5e0)
+        sfvec_ptr[5] = -4.0e0 * (loc_ptr[0] + loc_ptr[1] + loc_ptr[2] - 1.0e0) * loc_ptr[1]
+        sfvec_ptr[6] = -4.0e0 * (loc_ptr[0] + loc_ptr[1] + loc_ptr[2] - 1.0e0) * loc_ptr[2]
+        sfvec_ptr[7] = 4.0e0 * loc_ptr[0] * loc_ptr[2]
+        sfvec_ptr[8] = 4.0e0 * loc_ptr[1] * loc_ptr[2]
+        sfvec_ptr[9] = 2.0e0 * loc_ptr[2] * (loc_ptr[2] - 0.5e0)
+        N[i, :] = sfvec_ptr[:]
+    
+    return N
+
+
+def gr_lstq_amat(conn, nsf, ncrds):
+    '''
+        Inputs:
+                conn - the local connectivity array a nelem x 10 size array
+                nsf - the shape function matrix
+                ncrds - number of coordinates/nodal points in the grain
+        Output:
+                amat - the matrix used in our least squares problem for the grain
+                     It will be constant through out the solution.
+    '''
+    
+    nelems = conn.shape[1]
+    nqpts = nsf.shape[0]
+    amat = np.zeros((nelems*nqpts, ncrds))
+    #Build up our A matrix to be used in a least squares solution
+    j = 0
+    k = 0
+    for i in range(nelems):
+        j = i * nqpts
+        k = (i + 1) * nqpts
+        ecrds = np.squeeze(conn[:, i])
+        amat[j:k,  ecrds] = nsf
+    
+    return amat
+    
+def gr_lstq_solver(amat, q_mat, ncrds):
+    '''
+        Inputs:
+                conn - the local connectivity array a nelem x 10 size array
+                q_mat - vector at each quad point
+                        size = nqpts x nvec x nelems
+                ncrds - number of coordinates/nodal points in the grain
+        Output:
+                nod_mat - the nodal values of a grain for the q_mat
+                residual - the residual from the least squares
+                
+        A  least squares  routine is used to solve for the solution. 
+        It'll find the nodal values of the points at the quadrature mat for
+        a grain.
+    '''
+    
+    nvec = q_mat.shape[1]
+    nqpts = q_mat.shape[0]
+    nelems = q_mat.shape[2]
+    nod_mat = np.zeros((nvec,ncrds), dtype='float64')
+    b = np.zeros((nqpts*nelems))
+    residual = np.zeros(nvec)
+    
+    for i in range(nvec):
+        b[:] = np.ravel(q_mat[:, i, :], order = 'F')
+        nod_mat[i, :], residual[i], t1, t2 = np.linalg.lstsq(amat, b)
+        
+    return (nod_mat, residual)
+
+def gr_nnlstq(amat, q_mat, ncrds):
+    '''
+        Inputs:
+                conn - the local connectivity array a nelem x 10 size array
+                q_mat - vector at each quad point
+                        size = nqpts x nvec x nelems
+                nsf - the shape function matrix
+                ncrds - number of coordinates/nodal points in the grain
+        Output:
+                nod_agamma - the nodal values of a grain for the q_mat
+                residual - the residual from the least squares
+                
+        A nonnegative nonlinear least squares optimization routine is used to solve for
+        the solution. It'll find the nodal values of the absolute q_mat for
+        a grain.
+    '''
+    
+    nvec = q_mat.shape[1]
+    nqpts = q_mat.shape[0]
+    nelems = q_mat.shape[2]
+    nod_mat = np.zeros((nvec,ncrds), dtype='float64')
+    b = np.zeros((nqpts*nelems))
+    residual = np.zeros(nvec)
+    
+    for i in range(nvec):
+        b[:] = np.ravel(q_mat[:, i, :], order = 'F')
+        nod_mat[i, :], residual[i] = sciop.nnls(amat, b)
+        
+    return (nod_mat, residual)
     
