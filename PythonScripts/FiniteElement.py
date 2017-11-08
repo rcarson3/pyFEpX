@@ -338,7 +338,7 @@ def deformationStats(defgrad, wts, crd, con, misrot, xtalrot, strain, kor):
     fSpread = np.atleast_2d(np.sqrt(np.trace(vinv[:, :])))
     
     cen = utl.mat2d_row_order(np.sum(fevec*wts2, axis=1))
-    vi = fvec - np.tile(cen, (1, defgrad.shape[0]))
+    vi = fevec - np.tile(cen, (1, defgrad.shape[0]))
     vinv = np.sum(utl.RankOneMatrix(vi*wts2, vi), axis=2)
     feSpread = np.atleast_2d(np.sqrt(np.trace(vinv[:, :])))
     
