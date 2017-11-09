@@ -787,6 +787,36 @@ def sfmat():
     
     return N
 
+def sf_qpt_wts():
+    '''
+    Quadrature point weights for a 10 node tet
+    '''
+    
+    wtqp = np.zeros(15)
+    wtqp[0:3]   = 0.602678571428571597e-2
+    wtqp[4]     = 0.302836780970891856e-1
+    wtqp[5:8]   = 0.116452490860289742e-1
+    wtqp[9:14]  = 0.109491415613864534e-1
+
+    return wtqp    
+
+def sftsfmat():
+    '''
+        Creates a NTN array that has the appropriate weights applied at
+        each quadratutre point.
+        Also return NT with appropriate weight applied to it
+    '''
+    qpt_wts = sf_qpt_wts()
+    N = sfmat()
+    NT = N.T
+    
+    NTN = np.zeros((10,10,15))
+    
+    for i in range(15):
+        NTN[:,:,i] = np.outer(N[i,:], N[i,:]) * qpt_wts[i]
+        NT[:,i] = NT[:,i] * qpt_wts[i]
+
+    return (NTN, NT)        
 
 def gr_lstq_amat(conn, nsf, ncrds):
     '''
@@ -848,7 +878,6 @@ def gr_nnlstq(amat, q_mat, ncrds):
                 conn - the local connectivity array a nelem x 10 size array
                 q_mat - vector at each quad point
                         size = nqpts x nvec x nelems
-                nsf - the shape function matrix
                 ncrds - number of coordinates/nodal points in the grain
         Output:
                 nod_agamma - the nodal values of a grain for the q_mat
@@ -871,4 +900,76 @@ def gr_nnlstq(amat, q_mat, ncrds):
         nod_mat[i, :], residual[i] = sciop.nnls(amat, b)
         
     return (nod_mat, residual)
+
+def superconvergence_mat(NTN, qpt_det, conn, ncrds):
+    '''
+    Input:
+        NTN - the shape function transpose shape function outer product
+            matrix with dimensions - nnpe x nnpe x nqpts
+        qpt_det - the determinate of the jacobian matrix for each
+                quadrature point of an element - dimensions nelem x nqpts
+        conn - the connectivity array
+        ncrds - the number of coordinates
+    Output:
+        amat - the superconvergence matrix
+    '''
+    nelems = conn.shape[0]
+    nqpts = NTN.shape[2]
+    nnpe = NTN.shape[0]
+    amat = np.zeros((ncrds, ncrds))
     
+    for i in range(nelems):
+        for j in range(nqpts):
+            for k in range(nnpe):
+                ind = conn[i, k]
+                amat[ind, conn[i, :]] = amat[ind, conn[i, :]] + NTN[k,:,j] * qpt_det[i,j] 
+                 
+    return amat 
+
+def superconvergence_vec(NT, qpt_det, conn, qpt_vec, ncrds):
+    '''
+    Input
+    NT - the transpose shape function
+    qpt_det - the determinate of the jacobian matrix for each
+            quadrature point of an element - dimensions nelem x nqpts
+    conn - the connectivity array
+    qpt_vec - vector at each quad point for nvecs
+              size = nqpts x nvec x nelems
+    ncrds - the number of coordinates
+    
+    Output:
+        bvec - the integration of NT*qpt_vec over the domain product
+            size is ncrds x nvec
+    '''
+    
+    nqpts = qpt_det.shape[1]
+    nelems = conn.shape[0]
+    nvec = qpt_vec.shape[1]
+    nnpe = conn.shape[1]
+    bvec = np.zeros((ncrds, nvec))
+    tarr = np.zeros((nqpts))
+    tind = np.zeros((nnpe), dtype='int32')
+    
+    for i in range(nvec):
+        for j in range(nelems):
+            tind[:] = conn[j, :]
+            tarr[:] = qpt_vec[:,i,j]*qpt_det[j, :]
+            bvec[tind, i] = bvec[tind, i] + NT.dot(tarr)
+            
+    return bvec
+    
+
+def superconvergnce_solve(amat, bvec):
+    '''
+    Solves the superconvergence patch test problem to obtain values at the
+    nodal coordinates
+    Input:
+        amat - our superconvergence matrix
+        bvec - our superconvergence bvec with a size of ncrds x nvec
+    Output
+        xvec - our superconvergence nodal solutions with a size of ncrds x nvec
+    '''
+    
+    xvec = np.linalg.solve(amat, bvec)
+
+    return xvec.T   

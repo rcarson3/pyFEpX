@@ -213,6 +213,44 @@ SUBROUTINE get_def_grad(def_grad, disp, det, elmval, iqpt, cenval)
 
 END SUBROUTINE get_def_grad
 
+SUBROUTINE get_det(det)
+
+    IMPLICIT NONE
+
+    REAL(RK), INTENT(OUT) :: det(0:nelem1, 0:nqpt1) !the determinate for each element as change from local element and parent element
+
+    REAL(RK) :: dndx(0:nelem1, 0:nnpe)
+    REAL(RK) :: dndy(0:nelem1, 0:nnpe)
+    REAL(RK) :: dndz(0:nelem1, 0:nnpe)
+    REAL(RK) :: loc0, loc1, loc2
+    REAL(RK) :: t_grad(0:nelem1, 0:DIMS1, 0:DIMS1)
+    !inverted jacobian matrix values
+    REAL(RK) :: s11(0:nelem1), s12(0:nelem1), s13(0:nelem1)
+    REAL(RK) :: s21(0:nelem1), s22(0:nelem1), s23(0:nelem1)
+    REAL(RK) :: s31(0:nelem1), s32(0:nelem1), s33(0:nelem1)
+    REAL(RK) :: elmCoord(0:nelem1, 0:KDIM1)
+    REAL(RK) :: elmDisp(0:nelem1, 0:KDIM1)
+    INTEGER :: iqpt1, i
+
+    call getElemCoord(coord, elmCoord)
+
+    do iqpt1 = 0, nqpt1
+
+        ! coordinates in the parent element
+        loc0 = qploc(0, iqpt1)
+        loc1 = qploc(1, iqpt1)
+        loc2 = qploc(2, iqpt1)
+        ! weigth
+        !            wt = wtqp(0, iqpt)
+
+        call sfder_hpar(loc0, loc1, loc2, elmCoord, dndx, dndy,  &
+        &     dndz, det(:, iqpt1), s11, s12, s13, s21, s22, s23, s31, s32,  &
+        &     s33)
+
+    enddo
+
+END SUBROUTINE get_det
+
 SUBROUTINE get_dislocation_density(rot, density)
     IMPLICIT NONE
 

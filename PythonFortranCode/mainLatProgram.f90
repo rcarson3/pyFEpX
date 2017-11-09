@@ -89,6 +89,22 @@ USE IntrinsicTypesModule, RK=>REAL_KIND
 
 END SUBROUTINE getDefGrad
 
+SUBROUTINE getJacobianDet(det, nel1, nqp1)
+
+    USE lat_ori_fem_mod
+    USE IntrinsicTypesModule, RK=>REAL_KIND
+
+    IMPLICIT NONE
+
+    INTEGER, INTENT(IN) :: nel1
+    INTEGER, INTENT(IN) :: nqp1
+
+    REAL(RK), INTENT(OUT) :: det(0:nel1, 0:nqp1) !the determinate for each element as change from local element and parent element
+
+    call get_det(det)
+
+END SUBROUTINE getJacobianDet
+
 SUBROUTINE get_elm_data(iqpt, nel1, DIM1, ecrd, evel, erot)
 
 USE lat_ori_fem_mod
