@@ -1,16 +1,16 @@
 
 PythonFortranCode/.DS_Store
+PythonFortranCode/*.so
+PythonFortranCode/*.a
+PythonFortranCode/*.mod
+PythonScripts/*.so
 
 *.plist
-
-*.so
 
 *.so
 
 *.a
 
 *.mod
-
-*.so
 
 PythonFortranCode/.DS_Store
