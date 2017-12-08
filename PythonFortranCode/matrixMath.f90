@@ -236,4 +236,95 @@ SUBROUTINE getDevMat(mat, dev)
 
 END SUBROUTINE getDevMat
 
+SUBROUTINE invert4x4(m, v, invOut)
+    !Took this from a stackoverflow topic on how to code a inverted 4x4 matrix
+    IMPLICIT NONE
+
+    REAL(RK), INTENT(IN)  :: m(0:15)
+    REAL(RK), INTENT(OUT) :: invOut(0:15)
+    REAL(RK) :: inv
+    REAL(RK) :: det, idet
+
+    inv(0) =  m(5) * m(10) * m(15) - m(5) * m(11) * m(14) - m(9)&
+            &* m(6) * m(15) + m(9) * m(7) * m(14) + m(13) * m(6) * m(11) - m(13) * m(7) * m(10)
+
+    inv(4) = -m(4) * m(10) * m(15) + m(4) * m(11) * m(14) + m(8)&
+            &* m(6) * m(15) - m(8) * m(7) * m(14) - m(12) * m(6) * m(11) + m(12) * m(7) * m(10)
+
+    inv(8) =  m(4) * m(9) * m(15) - m(4) * m(11) * m(13) - m(8)&
+            &* m(5) * m(15) + m(8) * m(7) * m(13) + m(12) * m(5) * m(11) - m(12) * m(7) * m(9)
+
+    inv(12) = -m(4) * m(9) * m(14) + m(4) * m(10) * m(13) + m(8)&
+            &* m(5) * m(14) - m(8) * m(6) * m(13) - m(12) * m(5) * m(10) + m(12) * m(6) * m(9)
+
+    inv(1) = -m(1) * m(10) * m(15) + m(1) * m(11) * m(14) + m(9)&
+            &* m(2) * m(15) - m(9) * m(3) * m(14) - m(13) * m(2) * m(11) + m(13) * m(3) * m(10)
+
+    inv(5) =  m(0) * m(10) * m(15) - m(0) * m(11) * m(14) - m(8)&
+            &* m(2) * m(15) + m(8) * m(3) * m(14) + m(12) * m(2) * m(11) - m(12) * m(3) * m(10)
+
+    inv(9) = -m(0) * m(9) * m(15) + m(0) * m(11) * m(13) + m(8)&
+            &* m(1) * m(15) - m(8) * m(3) * m(13) - m(12) * m(1) * m(11) + m(12) * m(3) * m(9)
+
+    inv(13) =  m(0) * m(9) * m(14) - m(0) * m(10) * m(13) - m(8)&
+            &* m(1) * m(14) + m(8) * m(2) * m(13) + m(12) * m(1) * m(10) - m(12) * m(2) * m(9)
+
+    inv(2) =  m(1) * m(6) * m(15) - m(1) * m(7) * m(14) - m(5)&
+            &* m(2) * m(15) + m(5) * m(3) * m(14) + m(13) * m(2) * m(7) - m(13) * m(3) * m(6)
+
+    inv(6) = -m(0) * m(6) * m(15) + m(0) * m(7) * m(14) + m(4)&
+            &* m(2) * m(15) - m(4) * m(3) * m(14) - m(12) * m(2) * m(7) + m(12) * m(3) * m(6)
+
+    inv(10) =  m(0) * m(5) * m(15) - m(0) * m(7) * m(13) - m(4)&
+            &* m(1) * m(15) + m(4) * m(3) * m(13) + m(12) * m(1) * m(7) - m(12) * m(3) * m(5)
+
+    inv(14) = -m(0) * m(5) * m(14) + m(0) * m(6) * m(13) + m(4)&
+            &* m(1) * m(14) - m(4) * m(2) * m(13) - m(12) * m(1) * m(6) + m(12) * m(2) * m(5)
+
+    inv(3) = -m(1) * m(6) * m(11) + m(1) * m(7) * m(10) + m(5)&
+            &* m(2) * m(11) - m(5) * m(3) * m(10) - m(9) * m(2) * m(7) + m(9) * m(3) * m(6)
+
+    inv(7) =  m(0) * m(6) * m(11) - m(0) * m(7) * m(10) - m(4)&
+            &* m(2) * m(11) + m(4) * m(3) * m(10) + m(8) * m(2) * m(7) - m(8) * m(3) * m(6)
+
+    inv(11) = -m(0) * m(5) * m(11) + m(0) * m(7) * m(9) + m(4)&
+            &* m(1) * m(11) - m(4) * m(3) * m(9) - m(8) * m(1) * m(7) + m(8) * m(3) * m(5)
+
+    inv(15) =  m(0) * m(5) * m(10) - m(0) * m(6) * m(9) - m(4)&
+            &* m(1) * m(10) + m(4) * m(2) * m(9) + m(8) * m(1) * m(6) - m(8) * m(2) * m(5)
+
+    det = m(0) * inv(0) + m(1) * inv(4) + m(2) * inv(8) + m(3) * inv(12);
+
+    idet = 1.0_RK/det;
+
+    invOut(:) = inv(:) * idet;
+
+END SUBROUTINE invert4x4
+
+SUBROUTINE solve4x4(m, v, x)
+
+    !We are going to be using this for finding the barycentric coordinates of a tetrahedron
+    !This can then be used to tell us if a point is inside a tetrahedron or not. It can also
+    !be used to linearly interpolate scalar values out to the coords of the tetrahedron.
+
+    IMPLICIT NONE
+
+    REAL(RK), INTENT(IN)  :: m(4,4), v(4)
+    REAL(RK), INTENT(OUT) :: x(4)
+
+    REAL(RK) :: inv_m(4,4)
+    !Just giving a rough parameter for machine precision
+    REAL(RK), PARAMETER :: mach_eps = 2.2e-16
+
+    call invert4x4(m, inv_m)
+
+    x = matmul(inv_m, v)
+
+    !If under machine precision we're just going to set the value to zero
+    !This should also help us deal with points that lie on an edge or point of the
+    !tetrahedron
+    where(abs(x) .LE. mach_eps) x = 0.0_RK
+
+END SUBROUTINE solve4x4
+
 end module matrixMath

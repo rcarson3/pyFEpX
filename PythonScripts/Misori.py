@@ -4,6 +4,7 @@ import Utility as utl
 import Sphere as sph
 import Rotations as rot
 import FiniteElement as fe
+from sklearn.preprocessing import normalize
 
 '''
 This program was written by Robert Carson on June 10th, 2015.
@@ -97,12 +98,19 @@ def bartonStats(misorient, locations, *wts):
     
     Winv = np.sum(utl.RankOneMatrix(wi*wts, wi), axis=2)
     Xinv = np.sum(utl.RankOneMatrix(xi*wts, xi), axis=2)
-    
-#    W = np.linalg.inv(Winv)
-    W = np.eye(3) #Temporary fix to just get program to run
+    #We needed to scale this up if it was close to being ill-conditioned
+    if(np.abs(np.linalg.det(Winv)) < 1e-6):
+        Wtemp = np.multiply(1e9, Winv)
+        W = np.multiply(1e9, np.linalg.inv(Wtemp))
+    else:
+        W = np.linalg.inv(Winv)
     Whalf = sci.linalg.sqrtm(W)
     
-    X = np.linalg.inv(Xinv)
+    if(np.abs(np.linalg.det(Xinv)) < 1e-6):
+        Xtemp = np.multiply(1e9, Xinv)
+        X = np.multiply(1e9, np.linalg.inv(Xtemp))
+    else:
+        X = np.linalg.inv(Xinv)
     Xhalf = sci.linalg.sqrtm(X)
     
     wibar = np.dot(Whalf, wi)
@@ -151,7 +159,10 @@ def misorientationGrain(kocks, angs, frames, kor, gr_mis=False):
     csym = rot.CubSymmetries()
     j = 0
     for i in frames:
-        tQuat = rot.OrientConvert(np.squeeze(angs[:, :, i]), kor, 'quat', deg, deg)
+        if kor == 'axis' or kor == 'axisangle':
+            tQuat = rot.QuatOfAngleAxis(np.squeeze(angs[0, :, i]), np.squeeze(angs[1:4, :, i]))    
+        else:
+            tQuat = rot.OrientConvert(np.squeeze(angs[:, :, i]), kor, 'quat', deg, deg)
         misAngs[:, j], misQuat[:, :, j] = rot.Misorientation(origQuat, tQuat, csym)
         j +=1
         
@@ -318,11 +329,18 @@ def misorientationStats(misorient, *wts):
     
     Winv = np.sum(utl.RankOneMatrix(wi*wts, wi), axis=2)
     
-#    W = np.linalg.inv(Winv)
-    #Need to find a fix to this solution
-    W = np.eye(3)
+    #We needed to scale this up if it was close to being ill-conditioned
+    if(np.abs(np.linalg.det(Winv)) < 1e-6):
+        Wtemp = np.multiply(1e9, Winv)
+        W = np.multiply(1e9, np.linalg.inv(Wtemp))
+    else:
+        W = np.linalg.inv(Winv)
     
-    stat = {'W':W, 'Winv':Winv, 'wi':wi}
+    angax = np.zeros((4, n))
+    angax[0, :] = np.linalg.norm(wi, axis=0)
+    angax[1:4, :] = normalize(wi, axis=0)
+    
+    stat = {'W':W, 'Winv':Winv, 'wi':wi, 'angaxis':angax}
     
     return stat
     
@@ -351,6 +369,9 @@ def misorientationTensor(misori, lcrd, lcon, crd , grnum, crdOpt = False):
                 gSpread    is nframe, the grain spread as calculated from
                            Barton's paper using Winv. It is a scalar spread of
                            the misorientation blob.
+                  angaxis  is 4 x n x nframe, the normalized axial vectors with 
+                           the ang being 1st index  
+                           
                ! - vars are currently commented out inorder to save total space
                    used by the outputted dictionary
 
@@ -369,6 +390,7 @@ def misorientationTensor(misori, lcrd, lcon, crd , grnum, crdOpt = False):
     realMisori = np.zeros((3, 3, nframes))
     winv = np.zeros((3, 3, nframes))
     wi =  np.zeros((3, nelems, nframes))
+    angaxis = np.zeros((4, nelems, nframes))
     gspread = np.zeros((nframes,))
     
     for i in range(nframes):
@@ -381,8 +403,9 @@ def misorientationTensor(misori, lcrd, lcon, crd , grnum, crdOpt = False):
         realMisori[:, :, i] = tstat['W']
         winv[:, :, i] = tstat['Winv']
         wi[:,:,i] = tstat['wi']
+        angaxis[:,:,i] = tstat['angaxis']
         gspread[i] = np.sqrt(np.trace(winv[:, :, i]))
         
-    stats = {'W':realMisori, 'wi':wi, 'Winv':winv,  'gSpread':gspread}
+    stats = {'W':realMisori, 'wi':wi, 'angaxis':angaxis, 'Winv':winv,  'gSpread':gspread}
             
     return stats

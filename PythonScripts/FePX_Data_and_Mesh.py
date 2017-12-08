@@ -1,6 +1,6 @@
 import numpy as np
-# import TextAdapter as ta
-import iopro
+import textadapter as ta
+#import iopro
 import Utility as util
 
 '''
@@ -258,7 +258,7 @@ def readData(fileLoc, nProc, frames=None, fepxData=None, restart=False):
             fLoc = fileLoc + 'post.' + fName + '.' + str(p)
 
             if frDflt:
-                tmp = iopro.genfromtxt(fLoc, comments='%')
+                tmp = ta.genfromtxt(fLoc, comments='%')
             else:
                 tmp = selectFrameTxt(fLoc, tFrames, comments='%')
 
@@ -347,8 +347,14 @@ def readGrainData(fileLoc, grainNum, frames=None, grData=None):
         flDflt = True
     if frames is None:
         strgrnum = np.char.mod('%4.4d', np.atleast_1d(grainNum))[0]
-        file = fileLoc + 'gr_gdot'+ strgrnum +'.data'
+        if grData[0] == 'ang':
+            fend = '.rod'
+        else:
+            fend = '.data'
+        file = fileLoc + 'gr_' + grData[0] + strgrnum + fend
         nFrames = findComments(file)
+        if grData[0] == 'ang':
+            nFrames = nFrames - 1
         frames = np.arange(1, nFrames + 1)
         frDflt = True
     else:
@@ -375,7 +381,7 @@ def readGrainData(fileLoc, grainNum, frames=None, grData=None):
         fLoc = fileLoc + 'gr_' + fName + strgrnum + '.' + fend
 
         if frDflt:
-            tmp = iopro.genfromtxt(fLoc, comments='%')
+            tmp = ta.genfromtxt(fLoc, comments='%')
         else:
             tmp = selectFrameTxt(fLoc, tFrames, comments='%')
 
@@ -456,7 +462,7 @@ def readLOFEMData(fileLoc, nProc, nqpts=15, frames=None, lofemData=None):
             fLoc = fileLoc + 'lofem.' + fName + '.' + str(p)
 
             if frDflt:
-                tmp = iopro.genfromtxt(fLoc, comments='%')
+                tmp = ta.genfromtxt(fLoc, comments='%')
             else:
                 tmp = selectFrameTxt(fLoc, tFrames, comments='%')
 
@@ -535,7 +541,7 @@ def findComments(fileLoc):
     with open(fileLoc) as f:
         for line in f:
             tmp = line.split()
-            if tmp[0] == '%':
+            if tmp[0][0] == '%':
                 i += 1
     return i
 
