@@ -236,13 +236,13 @@ SUBROUTINE getDevMat(mat, dev)
 
 END SUBROUTINE getDevMat
 
-SUBROUTINE invert4x4(m, v, invOut)
+SUBROUTINE invert4x4(m, invOut)
     !Took this from a stackoverflow topic on how to code a inverted 4x4 matrix
     IMPLICIT NONE
 
     REAL(RK), INTENT(IN)  :: m(0:15)
     REAL(RK), INTENT(OUT) :: invOut(0:15)
-    REAL(RK) :: inv
+    REAL(RK) :: inv(0:15)
     REAL(RK) :: det, idet
 
     inv(0) =  m(5) * m(10) * m(15) - m(5) * m(11) * m(14) - m(9)&

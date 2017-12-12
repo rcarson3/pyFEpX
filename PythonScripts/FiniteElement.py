@@ -343,7 +343,7 @@ def deformationStats(defgrad, wts, crd, con, misrot, xtalrot, strain, kor):
     feSpread = np.atleast_2d(np.sqrt(np.trace(vinv[:, :])))
     
     misAngs, misQuats = mis.misorientationGrain(kocks, rkocks, [0], kor)
-    stats = mis.misorientationBartonTensor(misQuats, crd, con, crd, [0])
+    stats = mis.misorientationTensor(misQuats, crd, con, crd, [0])
     rSpread = stats['gSpread']
     
 #    misAngs, misQuats = mis.misorientationGrain(kocks, rpkocks, [0], kor)
@@ -786,6 +786,155 @@ def sfmat():
         N[i, :] = sfvec_ptr[:]
     
     return N
+
+def iso_dndx():
+    '''
+        Returns the isoparametric dndx matrix
+    '''
+    
+    NDIM = 3
+    
+    qp3d_ptr = np.zeros((NDIM*15))
+    
+    qp3d_ptr[0] =  0.333333333333333333e0
+    qp3d_ptr[1 * NDIM] =  0.333333333333333333e0
+    qp3d_ptr[2 * NDIM] =  0.333333333333333333e0
+    qp3d_ptr[3 * NDIM] =  0.0e0
+    qp3d_ptr[4 * NDIM] =  0.25e0
+    qp3d_ptr[5 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[6 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[7 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[8 * NDIM] =  0.727272727272727273e0
+    qp3d_ptr[9 * NDIM] =  0.665501535736642813e-1
+    qp3d_ptr[10 * NDIM] = 0.665501535736642813e-1
+    qp3d_ptr[11 * NDIM] = 0.665501535736642813e-1
+    qp3d_ptr[12 * NDIM] = 0.433449846426335728e0
+    qp3d_ptr[13 * NDIM] = 0.433449846426335728e0
+    qp3d_ptr[14 * NDIM] = 0.433449846426335728e0
+    
+    qp3d_ptr[1] =  0.333333333333333333e0
+    qp3d_ptr[1 + 1 * NDIM] =  0.333333333333333333e0
+    qp3d_ptr[1 + 2 * NDIM] =  0.0e0
+    qp3d_ptr[1 + 3 * NDIM] =  0.333333333333333333e0
+    qp3d_ptr[1 + 4 * NDIM] =  0.25e0
+    qp3d_ptr[1 + 5 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[1 + 6 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[1 + 7 * NDIM] =  0.727272727272727273e0
+    qp3d_ptr[1 + 8 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[1 + 9 * NDIM] =  0.665501535736642813e-1
+    qp3d_ptr[1 + 10 * NDIM] = 0.433449846426335728e0
+    qp3d_ptr[1 + 11 * NDIM] = 0.433449846426335728e0
+    qp3d_ptr[1 + 12 * NDIM] = 0.665501535736642813e-1
+    qp3d_ptr[1 + 13 * NDIM] = 0.665501535736642813e-1
+    qp3d_ptr[1 + 14 * NDIM] = 0.433449846426335728e0
+    
+    qp3d_ptr[2] =  0.333333333333333333e0
+    qp3d_ptr[2 + 1 * NDIM] =  0.0e0
+    qp3d_ptr[2 + 2 * NDIM] =  0.333333333333333333e0
+    qp3d_ptr[2 + 3 * NDIM] =  0.333333333333333333e0
+    qp3d_ptr[2 + 4 * NDIM] =  0.25e0
+    qp3d_ptr[2 + 5 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[2 + 6 * NDIM] =  0.727272727272727273e0
+    qp3d_ptr[2 + 7 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[2 + 8 * NDIM] =  0.909090909090909091e-1
+    qp3d_ptr[2 + 9 * NDIM] =  0.433449846426335728e0
+    qp3d_ptr[2 + 10 * NDIM] = 0.665501535736642813e-1
+    qp3d_ptr[2 + 11 * NDIM] = 0.433449846426335728e0
+    qp3d_ptr[2 + 12 * NDIM] = 0.665501535736642813e-1
+    qp3d_ptr[2 + 13 * NDIM] = 0.433449846426335728e0
+    qp3d_ptr[2 + 14 * NDIM] = 0.665501535736642813e-1
+    
+    iso_dndx = np.zeros((3,10,15))
+    dndx_ptr = np.zeros((30))    
+    
+    for i in range(15):
+        loc_ptr = qp3d_ptr[i*3:(i+1)*3]
+        dndx_ptr[0]  = 4.0e0 * (loc_ptr[0] + loc_ptr[1] + loc_ptr[2]) - 3.0e0;
+        dndx_ptr[1]  = 4.0e0 * (loc_ptr[0] + loc_ptr[1] + loc_ptr[2]) - 3.0e0;
+        dndx_ptr[2]  = 4.0e0 * (loc_ptr[0] + loc_ptr[1] + loc_ptr[2]) - 3.0e0;
+        dndx_ptr[3]  = -4.0e0 * (2.0e0 * loc_ptr[0] + loc_ptr[1] +loc_ptr[2] - 1.0e0);
+        dndx_ptr[4]  = -4.0e0 * loc_ptr[0];
+        dndx_ptr[5]  = -4.0e0 * loc_ptr[0];
+        dndx_ptr[6]  = 4.0e0 * loc_ptr[0] - 1.0e0;
+        dndx_ptr[7]  = 0.0e0;
+        dndx_ptr[8]  = 0.0e0;
+        dndx_ptr[9]  = 4.0e0 * loc_ptr[1];
+        dndx_ptr[10] = 4.0e0 * loc_ptr[0];
+        dndx_ptr[11] = 0.0e0;
+        dndx_ptr[12] = 0.0e0;
+        dndx_ptr[13] = 4.0e0 * loc_ptr[1] - 1.0e0;
+        dndx_ptr[14] = 0.0e0;
+        dndx_ptr[15] = -4.0e0 * loc_ptr[1];
+        dndx_ptr[16] = -4.0e0 * (loc_ptr[0] + 2.0e0 * loc_ptr[1] + loc_ptr[2] - 1.0e0);
+        dndx_ptr[17] = -4.0e0 * loc_ptr[1];
+        dndx_ptr[18] = -4.0e0 * loc_ptr[2];
+        dndx_ptr[19] = -4.0e0 * loc_ptr[2];
+        dndx_ptr[20] = -4.0e0 * (loc_ptr[0] + loc_ptr[1] + 2.0e0 * loc_ptr[2] - 1.0e0);
+        dndx_ptr[21] = 4.0e0 * loc_ptr[2];
+        dndx_ptr[22] = 0.0e0;
+        dndx_ptr[23] = 4.0e0 * loc_ptr[0];
+        dndx_ptr[24] = 0.0e0;
+        dndx_ptr[25] = 4.0e0 * loc_ptr[2];
+        dndx_ptr[26] = 4.0e0 * loc_ptr[1];
+        dndx_ptr[27] = 0.0e0;
+        dndx_ptr[28] = 0.0e0;
+        dndx_ptr[29] = 4.0e0 * loc_ptr[2] - 1.0e0;
+        iso_dndx[:,:,i] = np.reshape(dndx_ptr, (3, 10), order='F')
+
+    return iso_dndx
+
+def local_gradient_shape_func(iso_dndx, elem_crd, iqpt):
+    '''
+    This function takes in element coordinates, and then using the parent
+     gradient shape functions that are constant through out the simulation
+     it calculates the local gradient shape functions for each element at
+     each quadrature point.
+     Input:
+         iso_dndx - the isoparametric dndx matrix.
+         elem_crd - the elemental coordinate array - nnpex3xnelems
+         iqpt     - the quadrature point are we interested in examining
+     
+     Output: 
+         loc_dndx - The local gradient shape functions at the quadrature point
+             for each element. It has a shape of 3xnnpexnelems
+    '''
+    
+    nelems = elem_crd.shape[2]
+    nnpe = elem_crd.shape[0]
+    
+    loc_dndx = np.zeros((3, nnpe, nelems))
+    jac = np.zeros((3,3))
+    ijac = np.zeros((3,3))
+    
+    
+    for i in range(nelems):
+        jac = np.dot(iso_dndx[:,:,iqpt], elem_crd[:,:,i])
+        ijac = np.linalg.inv(jac)
+        loc_dndx[:,:,i] = np.dot(ijac, iso_dndx[:,:,iqpt])
+        
+    return loc_dndx
+    
+def get_scalar_grad(scalar, loc_dndx):
+    '''
+    This function uses the local gradient shape functions from each element
+    to calculate the gradient of a scalar field.
+    
+    Input:
+        scalar - the scalar field which is a nnpexnelem
+        loc_dndx - the local gradient shape function which is a 3xnnpexnelems
+    Output:
+        scalar_grad - the scalar gradient at some quadrature point within the
+        element. It has a size of 3xnelems
+    '''
+    
+    nelems = scalar.shape[1]
+    
+    scalar_grad = np.zeros((3, nelems))
+    
+    for i in range(nelems):
+        scalar_grad[:, i] = np.dot(scalar[:, i], loc_dndx[:,:,i].T)
+
+    return scalar_grad    
 
 def sf_qpt_wts():
     '''

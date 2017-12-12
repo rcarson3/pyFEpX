@@ -100,8 +100,11 @@ def bartonStats(misorient, locations, *wts):
     Xinv = np.sum(utl.RankOneMatrix(xi*wts, xi), axis=2)
     #We needed to scale this up if it was close to being ill-conditioned
     if(np.abs(np.linalg.det(Winv)) < 1e-6):
-        Wtemp = np.multiply(1e9, Winv)
-        W = np.multiply(1e9, np.linalg.inv(Wtemp))
+        if(np.abs(np.linalg.det(Winv)) < 1e-16):
+            W = np.zeros((3,3))
+        else:
+            Wtemp = np.multiply(1e9, Winv)
+            W = np.multiply(1e9, np.linalg.inv(Wtemp))
     else:
         W = np.linalg.inv(Winv)
     Whalf = sci.linalg.sqrtm(W)
@@ -331,8 +334,11 @@ def misorientationStats(misorient, *wts):
     
     #We needed to scale this up if it was close to being ill-conditioned
     if(np.abs(np.linalg.det(Winv)) < 1e-6):
-        Wtemp = np.multiply(1e9, Winv)
-        W = np.multiply(1e9, np.linalg.inv(Wtemp))
+        if(np.abs(np.linalg.det(Winv)) < 1e-16):
+            W = np.zeros((3,3))
+        else:
+            Wtemp = np.multiply(1e9, Winv)
+            W = np.multiply(1e9, np.linalg.inv(Wtemp))
     else:
         W = np.linalg.inv(Winv)
     
