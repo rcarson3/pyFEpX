@@ -164,15 +164,13 @@ def grain_conn_mesh(ndconn, conn, grains, nnode):
             #Then we simply get the index of our node
             ind = nodes == i
             #Finally we increment the conn array
-            conn[ind, j] = incr + i + np.where(ugrns == grains[j])
+            conn[ind, j] = incr + i + np.where(ugrns == grains[j])[0][0]
                   
         #We don't need to increment anything if there is only one grain for
         #that node
         nincr = ugrns.shape[0] - 1
         incr = incr + nincr
-      
-    
-    
+
     return conn
 
 

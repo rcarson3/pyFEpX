@@ -942,10 +942,10 @@ def sf_qpt_wts():
     '''
     
     wtqp = np.zeros(15)
-    wtqp[0:3]   = 0.602678571428571597e-2
+    wtqp[0:4]   = 0.602678571428571597e-2
     wtqp[4]     = 0.302836780970891856e-1
-    wtqp[5:8]   = 0.116452490860289742e-1
-    wtqp[9:14]  = 0.109491415613864534e-1
+    wtqp[5:9]   = 0.116452490860289742e-1
+    wtqp[9:15]  = 0.109491415613864534e-1
 
     return wtqp    
 
@@ -1121,4 +1121,61 @@ def superconvergnce_solve(amat, bvec):
     
     xvec = np.linalg.solve(amat, bvec)
 
-    return xvec.T   
+    return xvec.T 
+
+def jacobian_lin(mesh):
+    '''
+    jacobian_lin - Compute Jacobian of linear mesh mappings.
+    
+      USAGE:
+    
+      jac = jacobian_lin(mesh)
+    
+      INPUT:
+    
+      mesh is a MeshStructure,
+           with simplicial element type
+    
+      OUTPUT:
+    
+      jac is 1 x m, 
+          the Jacobian of each element
+    
+      NOTES:
+    
+      *  The mesh may be embedded in a space of higher 
+         dimension than the reference element.  In that
+         case, the Jacobian is computed as (sqrt(det(J'*J))
+         and is always positive.  When the target space is
+         of the same dimension as the reference element,
+         the Jacobian is computed as usual and can be
+         positive or negative.
+    
+      *  Only simplicial (linear) element types are allowed. 
+    '''
+    
+    crd = mesh['crd']
+    con = mesh['con']
+    
+    e = con.shape[0]
+    ddom = e - 1
+    dtar = crd.shape[0]
+    
+    nels = con.shape[1]
+    
+    jac = np.zeros(nels)
+    
+    if (ddom == dtar):
+        for i in range(nels):
+            simp = crd[:, con[:, i].T]
+            mat = simp[:, 0:ddom] - np.tile(simp[:, e] (1, ddom))
+            jac[i] = np.linalg.det(mat)
+    else:
+        for i in range(nels):
+            simp = crd[:, con[:, i].T]
+            mat = simp[:, 0:ddom] - np.tile(simp[:, e] (1, ddom))
+            mat = mat.T.dot(mat)
+            jac[i] = np.sqrt(np.linalg.det(mat))
+    
+    return jac
+    
