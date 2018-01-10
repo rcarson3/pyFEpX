@@ -66,13 +66,13 @@ def graph_DFS(graph, set_true, set_false):
         i = stack_node.pop()
         #Check to see if that node has already been seen
         if i not in seen:
-            #Go ahead and 
+            #Go ahead and add that node to seen 
             seen.add(i)
             #We now create an empty set for our connected components
             tmp_con_comp = set()
             #Go ahead and add the node we are starting off with
             tmp_con_comp.add(i)
-            #Form the stack for our 
+            #Form the stack for our  stack_DFS with node I's nodal neighbors
             stack_DFS.extend(graph[i])
             while stack_DFS:
                 j = stack_DFS.pop()
@@ -82,7 +82,7 @@ def graph_DFS(graph, set_true, set_false):
                    tmp_con_comp.add(j)
                    #Add node j to seen
                    seen.add(j)
-                   #Extend our stack_DFS with node Js nodal neighbors
+                   #Extend our stack_DFS with node J's nodal neighbors
                    stack_DFS.extend(graph[j])
             #We can now add the temporary connected component set to our 
             #connected components list
@@ -125,3 +125,4 @@ def global_conn_comps(conn_comps):
         Takes in a list of global conn_comps and then outputs a 
     
     '''
+    pass

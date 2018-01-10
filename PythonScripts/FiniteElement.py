@@ -151,6 +151,37 @@ def localConnectCrd(mesh, grNum):
     
     return (con, crd,  uPts, uElem)
 
+def localGrainConnectCrd(mesh, grNum):
+    '''
+    Calculates the local connectivity based upon the grain number provided
+    
+    Input: mesh - a dict structure given by the FePX_Data_and_Mesh module'
+           grNum - an integer that corresponds to the grain of interest
+    
+    Output:con - 10xn numpy array connectivity array that says which nodes go
+                 with what elements and that have corrected the node numbers to
+                 correspond to only be 0 - (nelem-1) in the grain
+           crd - 3xn numpy array of coordinates that correspond to this grain
+    '''    
+    
+    logInd = mesh['grains'] == grNum
+    
+    lenlogInd = len(logInd)
+    elemInd = np.r_[0:lenlogInd]
+    uElem = elemInd[logInd]
+    con = mesh['crd_con'][:, logInd]
+    nelem = con.shape[1]
+    vecCon = con.reshape((10*nelem,1))
+    uPts = np.int32(np.unique(vecCon))
+    count = 0
+    for i in uPts:
+        vecCon[vecCon == i] = count
+        count +=1
+        
+    con = np.int_(vecCon.reshape((10, nelem)))
+    
+    return (con, uPts, uElem)
+
 def concatConnArray(gconn, lconn, gupts, lupts, guelem, luelem):
     '''
         Takes in a "global" connectivity array and adds one with local node
