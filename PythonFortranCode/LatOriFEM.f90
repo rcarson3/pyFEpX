@@ -324,7 +324,11 @@ SUBROUTINE get_alpha_tensor(grad, vec)
         &     dndz, det, s11, s12, s13, s21, s22, s23, s31, s32,  &
         &     s33)
 
-    call mat_gradientT(grad, dndx, dndy, dndz, elmVec)
+    !While it is the transpose that we need for nye tensor what we're outputting is the transpose
+    !due to how Fortran has memory layout. Since the function calling this is reducing the dimensionality
+    !of the matrix from a 3x3 to a 9x1 we're okay because it the columns are taken first. The L2 method
+    !above makes the assumption that the data is laid out according to rows.
+    call mat_gradient(grad, dndx, dndy, dndz, elmVec)
 
     trk(:) = 0.5_RK * (grad(0,0,:) + grad(1,1,:) + grad(2,2,:))
     grad(0,0,:) = grad(0,0,:) - trk(:)
@@ -482,15 +486,15 @@ do j = 0, nnpe
         i3 = i2 + 1
 
         ndgrad(0, 0, i) = ndgrad(0, 0, i) + dndx(i, j) * gnd(i, i1)
-        ndgrad(0, 1, i) = ndgrad(0, 1, i) + dndy(i, j) * gnd(i, i2)
-        ndgrad(0, 2, i) = ndgrad(0, 2, i) + dndz(i, j) * gnd(i, i3)
+        ndgrad(0, 1, i) = ndgrad(0, 1, i) + dndx(i, j) * gnd(i, i2)
+        ndgrad(0, 2, i) = ndgrad(0, 2, i) + dndx(i, j) * gnd(i, i3)
 
-        ndgrad(1, 0, i) = ndgrad(1, 0, i) + dndx(i, j) * gnd(i, i1)
+        ndgrad(1, 0, i) = ndgrad(1, 0, i) + dndy(i, j) * gnd(i, i1)
         ndgrad(1, 1, i) = ndgrad(1, 1, i) + dndy(i, j) * gnd(i, i2)
-        ndgrad(1, 2, i) = ndgrad(1, 2, i) + dndz(i, j) * gnd(i, i3)
+        ndgrad(1, 2, i) = ndgrad(1, 2, i) + dndy(i, j) * gnd(i, i3)
 
-        ndgrad(2, 0, i) = ndgrad(2, 0, i) + dndx(i, j) * gnd(i, i1)
-        ndgrad(2, 1, i) = ndgrad(2, 1, i) + dndy(i, j) * gnd(i, i2)
+        ndgrad(2, 0, i) = ndgrad(2, 0, i) + dndz(i, j) * gnd(i, i1)
+        ndgrad(2, 1, i) = ndgrad(2, 1, i) + dndz(i, j) * gnd(i, i2)
         ndgrad(2, 2, i) = ndgrad(2, 2, i) + dndz(i, j) * gnd(i, i3)
 
     enddo
