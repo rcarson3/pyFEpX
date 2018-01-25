@@ -415,9 +415,7 @@ def nearvertex(sigs, vert, nverts, xtalrot, wts):
                the stress is from one of the initial vertices across grain.
     '''
     
-    nelem = sigs.shape[0] 
-    
-#    angs = np.zeros((nelem))
+    nelem = sigs.shape[0]
 
     xtalsig = np.zeros((nelem, 3, 3))    
     
@@ -445,51 +443,6 @@ def nearvertex(sigs, vert, nverts, xtalrot, wts):
         
     return mangs
 
-#numVert=m/3;
-#
-#vert=zeros(3,3,numVert);
-#
-#minDist=0;
-#
-#n=1;
-#
-#for i=1:numVert
-#
-#    tVert=var([(i-1)*3+1:i*3],:);
-#    vert(:,:,i)=tVert;
-#    distVert=sqrt(sum(tVert([1,5,9,8,7,4]).^2));
-#    
-#    dotD=D([1,5,9,8,7,4])*tVert([1,5,9,8,7,4])';
-#%     normD=dotD/(norm(D([1,5,9,8,7,4])')*norm(tVert([1,5,9,8,7,4])));
-#    
-#%     trD=real(acos(normD));
-#    
-#    
-#    if dotD>minDist
-#      if dotD==minDist
-#        minDist=dotD;
-#        ind(n)=i;
-#        
-#        n=n+1;
-#        
-#       else
-#           
-#        minDist=dotD;
-#        n=1;
-#        ind=[];
-#        ind(n)=i;
-#        
-#        n=n+1;
-#        
-#       end
-#        
-#    end
-#    
-#end
-#
-#sig=g0.*vert(:,:,ind);
-#
-#end
 
 def elem_fe_cen_val(crds, conn):
     '''
@@ -928,23 +881,28 @@ def local_gradient_shape_func(iso_dndx, elem_crd, iqpt):
      Output: 
          loc_dndx - The local gradient shape functions at the quadrature point
              for each element. It has a shape of 3xnnpexnelems
+          qpt_det - The determinant at the quadrature point for each element.
+                It has a shape of nelems
     '''
     
     nelems = elem_crd.shape[2]
     nnpe = elem_crd.shape[0]
     
-    loc_dndx = np.zeros((3, nnpe, nelems))
-    jac = np.zeros((3,3))
-    ijac = np.zeros((3,3))
+    loc_dndx = np.zeros((3, nnpe, nelems), dtype='float64', order='F')
+    qpt_det = np.zeros((nelems), dtype='float64', order='F')
+    jac = np.zeros((3,3), dtype='float64', order='F')
+    ijac = np.zeros((3,3), dtype='float64', order='F')
     
     
     for i in range(nelems):
         jac = np.dot(iso_dndx[:,:,iqpt], elem_crd[:,:,i])
         ijac = np.linalg.inv(jac)
+        qpt_det[i] = ((ijac[0,0]*ijac[1,1]*ijac[2,2] + ijac[0,1]*ijac[1,2]*ijac[2,0] + ijac[0,2]*ijac[1,0]*ijac[2,1])
+                    - (ijac[0,2]*ijac[1,1]*ijac[2,0] + ijac[0,1]*ijac[1,0]*ijac[2,2] + ijac[0,0]*ijac[1,2]*ijac[2,1]))
         loc_dndx[:,:,i] = np.dot(ijac, iso_dndx[:,:,iqpt])
         
-    return loc_dndx
-    
+    return (loc_dndx, qpt_det)
+ 
 def get_scalar_grad(scalar, loc_dndx):
     '''
     This function uses the local gradient shape functions from each element
@@ -960,12 +918,104 @@ def get_scalar_grad(scalar, loc_dndx):
     
     nelems = scalar.shape[1]
     
-    scalar_grad = np.zeros((3, nelems))
+    scalar_grad = np.zeros((3, nelems), dtype='float64', order='F')
     
     for i in range(nelems):
         scalar_grad[:, i] = np.dot(scalar[:, i], loc_dndx[:,:,i].T)
 
     return scalar_grad    
+
+
+def get_vec_grad(vec, loc_dndx):
+    '''
+    This function uses the local gradient shape functions from each element
+    to calculate the gradient of a vector field.
+    
+    Input:
+        vec - the vector field which is a 3xnnpexnelem
+        loc_dndx - the local gradient shape function which is a 3xnnpexnelems
+    Output:
+        scalar_grad - the vector gradient at some quadrature point within the
+        element. It has a size of 3x3xnelems
+    '''
+    
+    nelems = vec.shape[2]
+    
+    vec_grad = np.zeros((3, 3, nelems), dtype='float64', order='F')
+    
+    for i in range(nelems):
+        vec_grad[:, :, i] = vec[:,:,i].dot(loc_dndx[:,:,i].T)
+
+    return vec_grad 
+
+def get_nye_tensor(vec_grad):
+    '''
+    This function uses the lattice orientation gradient field
+    and computes the nye tensor.
+    
+    Input:
+        vec_grad - the vector field which is a 3x3xnelem
+    Output:
+        nye_ten - the nye tensor which is a 3x3xnelem
+    '''
+    nelems = vec_grad.shape[2]
+    vec_gradT = np.swapaxes(vec_grad, 0, 1)
+    trT = np.zeros((3,3,nelems), dtype='float64', order='F')
+    for i in range(nelems):
+        trT[:,:,i] = 0.5 * np.eye(3)*np.trace(np.squeeze(vec_gradT[:,:,i]))
+    nye_ten = vec_gradT - trT
+    
+    return nye_ten
+
+def get_l2_norm_dd(nye_ten, l2mat):
+    '''
+    It takes in the nye tensor and outputs the dislocation density using
+    the L2 norm method. It also takes in the L2 matrix from Arsenlis 1999 paper.
+    
+    Input: nye_ten - the nye tensor as calculated in the above function which is
+                    a 3x3xnelem
+           l2mat - the L2 mat as given in Arsenlis 1999 paper for FCC materials. If
+                  you had a different system then the L2 matrix would need to be calculated
+                  ahead of time. The size is nslip x 9
+           
+    Output: dd - the dislocation density for the 12 main slip systems in an FCC material if
+                 the L2 mat is from the 1999 Arsenlis paper. If it isn't then it is however
+                 many main slip systems in your material. The size is nslip x nelems
+    
+    '''
+    
+    nelems = nye_ten.shape[2]
+    dd = np.zeros((12, nelems), dtype='float64', order='F')
+    alpha = nye_ten.reshape(9, nelems)
+    
+    for i in range(nelems):
+        dd[:, i] = l2mat.dot(alpha[:,i])
+        
+    return dd
+
+def get_l2_matrix():
+    '''
+    The L2 mat from Arsenlis 1999 paper for GND calculations for an FCC material
+    Output: l2mat - The l2mat as given in the paper which is 12 x 9.
+    '''
+    
+    a = np.sqrt(3.0)/9.0
+    c = np.sqrt(3.0)/84.0
+    z = 0.0
+    
+    l2mat = np.zeros((12, 9), dtype='float64', order='F')
+    
+    l2mat[:, 0] = [a, -a, z, a, -a, z, a, -a, z, a, -a, z]
+    l2mat[:, 1] = [7.0*c, 13.0*c, c, -7.0*c, -13.0*c, -c, -7.0*c, -13.0*c, -c, 7.0*c, 13.0*c, c]
+    l2mat[:, 2] = [-13.0*c, -7.0*c, -c, 13.0*c, 7.0*c, c,-13.0*c, -7.0*c, -c, 13.0*c, 7.0*c, c]
+    l2mat[:, 3] = [7.0*c, c, 13.0*c, -7.0*c, -c, -13.0*c, -7.0*c, -c, -13.0*c, 7.0*c, c, 13.0*c]
+    l2mat[:, 4] = [-a, z, a, -a, z, a, -a, z, a, -a, z, a]
+    l2mat[:, 5] = [13.0*c, c, 7.0*c, 13.0*c, c, 7.0*c, -13.0*c, -c, -7.0*c, -13.0*c, -c, -7.0*c]
+    l2mat[:, 6] = [c, 7.0*c, 13.0*c, -c, -7.0*c, -13.0*c, c, 7.0*c, 13.0*c, -c, -7.0*c, -13.0*c]
+    l2mat[:, 7] = [-c, -13.0*c, -7.0*c, -c, -13.0*c, -7.0*c, -c, 13.0*c, 7.0*c, c, 13.0*c, 7.0*c]
+    l2mat[:, 8] = [z, a, -a, z, a, -a, z, a, -a, z, a, -a]
+    
+    return l2mat
 
 def sf_qpt_wts():
     '''
