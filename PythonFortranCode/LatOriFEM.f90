@@ -260,9 +260,9 @@ SUBROUTINE get_dislocation_density(rot, density)
     REAL(RK) :: alpha(0:8, 0:nelem1)
 
     REAL(RK), PARAMETER :: a = sqrt(3.0)/9.0
-    REAL(RK), PARAMETER :: b = sqrt(3.0)/84.0
-    REAL(RK), PARAMETER :: c = 1.0/18.0
-    REAL(RK), PARAMETER :: d = 3.0/14.0
+    REAL(RK), PARAMETER :: c = sqrt(3.0)/84.0
+    REAL(RK), PARAMETER :: d = 1.0/18.0
+    REAL(RK), PARAMETER :: e = 3.0/14.0
     REAL(RK), PARAMETER :: z = 0.0
 
     INTEGER :: i
@@ -326,7 +326,7 @@ SUBROUTINE get_alpha_tensor(grad, vec)
 
     call mat_gradientT(grad, dndx, dndy, dndz, elmVec)
 
-    trk(:) = grad(0,0,:) + grad(1,1,:) + grad(2,2,:)
+    trk(:) = 0.5_RK * (grad(0,0,:) + grad(1,1,:) + grad(2,2,:))
     grad(0,0,:) = grad(0,0,:) - trk(:)
     grad(1,1,:) = grad(1,1,:) - trk(:)
     grad(2,2,:) = grad(2,2,:) - trk(:)
