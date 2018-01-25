@@ -1,9 +1,10 @@
 import numpy as np
 import scipy.linalg as scila
 # from Misori import Misorientation
-import mesh  # not yet written
+import mesh as msh # not yet written
 import PolytopeStructure as PStruc  # not yet written
 import Utility as utl
+from sklearn.preprocessing import normalize
 
 '''
 This program was written by Robert Carson on June 10th, 2015.
@@ -411,7 +412,7 @@ def QuatOfRMat(rmat):
     nspec = np.sum(special)
 
     if nspec > 0:
-        angle[special] = np.tile(np.pi, (nspec))
+        angle[special] = np.tile(np.pi, (1, nspec))
         if rsize[2] == 1:
             tmp = np.atleast_3d(rmat[:, :, 0])+np.tile(np.atleast_3d(np.identity(3)), (1, 1, nspec))
         else:
@@ -610,6 +611,21 @@ def QuatOfAngleAxis(angle, raxis):
     quat[:, q1neg] = -1*quat[:, q1neg]
 
     return quat
+
+def AngleAxisOfRod(rod):
+    '''
+    Takes in a Rodrigues Vector and returns the angle axis pair
+    '''
+    
+    rod =  utl.mat2d_row_order(rod)   
+    
+    angle = 2*np.arctan(np.linalg.norm(rod, axis=0))
+
+    ang_axis = angle*normalize(rod, axis=0)
+    
+    return ang_axis
+    
+    
 
 '''
 Universal convertion function
@@ -948,11 +964,56 @@ def CubBaseMesh():
         
         
         '''
-    m = LoadMesh('cub-base')
+    m = msh.LoadMesh('cub-base')
     m['symmetries'] = CubSymmetries()
 
-    pass
+    return m
 
+def HexBaseMesh():
+    '''
+        
+        HexBaseMesh - Return base mesh for hexagonal symmetries
+        
+        USAGE:
+        
+        m = HexBaseMesh
+        
+        INPUT:  no inputs
+        
+        OUTPUT:
+        
+        m is a MeshStructure,
+        on the hexagonal fundamental region
+        
+        
+        '''
+    m = msh.LoadMesh('hex-base')
+    m['symmetries'] = HexSymmetries()
+
+    return m
+
+def OrtBaseMesh():
+    '''
+        
+        OrtBaseMesh - Return base mesh for orthorhombic symmetries
+        
+        USAGE:
+        
+        m = OrtBaseMesh
+        
+        INPUT:  no inputs
+        
+        OUTPUT:
+        
+        m is a MeshStructure,
+        on the orthorhombic fundamental region
+        
+        
+        '''
+    m = msh.LoadMesh('ort-base')
+    m['symmetries'] = OrtSymmetries()
+
+    return m
 
 def CubPolytope():
 

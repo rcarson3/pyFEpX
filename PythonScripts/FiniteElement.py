@@ -227,7 +227,85 @@ def concatConnArray(gconn, lconn, gupts, lupts, guelem, luelem):
     
     return (fconn, fupts, fuelem)
     
+def lofem_elas_stretch_stats(wts, xtalrot_l, xtalrot_d, strain_l, strain_d):
+    '''
+    A function to compare the elastic left stretch tensor metric for both
+    a LOFEM and discrete lattice orientation evolution method. It also
+    returns a metric that shows the difference between the two sets of
+    elastic stretch.
     
+    Input: wts - a n numpy vec of relative wts of the elements
+          xtralrot_l - a rodrigues vector of 3xnelem of the lattice orientation for LOFEM update
+          xtralrot_d - a kocks vector of 3xnelem of the lattice orientation for discrete update
+          strain_l - the crystal frame strain for the LOFEM update as a nelemx3x3
+          strain_d - the crystal frame strain for the discrete update as a nelemx3x3
+          
+    Output:data - a dict that contains the following
+                veSpread_L - the elastic left stretch tensor metric for a grain for LOFEM update
+                veSpread_D - the elastic left stretch tensor metric for a grain for discrete update
+                veSpread_Diff - the elastic left stretch tensor metric for the difference
+                    between the lofem and discrete method. In other words, the difference
+                    of the stretch at each element is used for its calculations.
+           
+    '''
+
+    nelems = wts.shape[0]
+    
+    vevec_l = np.zeros((6, nelems))
+    vevec_d = np.zeros((6, nelems))
+    vevec = np.zeros((6, nelems))
+    
+    wts = wts/np.sum(wts)
+    wts1 = np.tile(wts, (6, 1))
+    
+
+    for i in range(wts.shape[0]):    
+        
+        xtalrmat = np.squeeze(rot.OrientConvert(xtalrot_l[:, i], 'rod', 'rmat', 'degrees', 'degrees'))
+        velas_l = np.eye(3) +  xtalrmat.dot(strain_l[i, :, :].dot(xtalrmat.T)) #convert strain from lattice to sample
+        
+        xtalrmat = np.squeeze(rot.OrientConvert(xtalrot_d[:, i], 'kocks', 'rmat', 'degrees', 'degrees'))
+        velas_d = np.eye(3) +  xtalrmat.dot(strain_d[i, :, :].dot(xtalrmat.T))
+        
+        
+        vevec_l[0, i] = velas_l[0,0]
+        vevec_l[1, i] = velas_l[1,1]
+        vevec_l[2, i] = velas_l[2,2]
+        vevec_l[3, i] = velas_l[1,2]
+        vevec_l[4, i] = velas_l[0,2]
+        vevec_l[5, i] = velas_l[0,1]
+        
+        vevec_d[0, i] = velas_d[0,0]
+        vevec_d[1, i] = velas_d[1,1]
+        vevec_d[2, i] = velas_d[2,2]
+        vevec_d[3, i] = velas_d[1,2]
+        vevec_d[4, i] = velas_d[0,2]
+        vevec_d[5, i] = velas_d[0,1]
+        
+    vevec = vevec_l - vevec_d
+   
+     
+    cen = utl.mat2d_row_order(np.sum(vevec*wts1, axis=1)) 
+    vi = vevec - np.tile(cen, (1, nelems)) 
+    vinv = np.sum(utl.RankOneMatrix(vi*wts1, vi), axis=2) 
+    diff_vespread = np.atleast_2d(np.sqrt(np.trace(vinv[:, :])))
+    
+    
+    cen = utl.mat2d_row_order(np.sum(vevec_l*wts1, axis=1)) 
+    vi = vevec_l - np.tile(cen, (1, nelems)) 
+    vinv = np.sum(utl.RankOneMatrix(vi*wts1, vi), axis=2) 
+    vespread_l = np.atleast_2d(np.sqrt(np.trace(vinv[:, :])))
+    
+    cen = utl.mat2d_row_order(np.sum(vevec_d*wts1, axis=1)) 
+    vi = vevec_d - np.tile(cen, (1, nelems)) 
+    vinv = np.sum(utl.RankOneMatrix(vi*wts1, vi), axis=2) 
+    vespread_d = np.atleast_2d(np.sqrt(np.trace(vinv[:, :])))
+    
+    
+
+    data = {'veSpread_L':vespread_l,  'veSpread_D':vespread_d, 'veSpread_Diff':diff_vespread,}
+    
+    return data
     
 def deformationStats(defgrad, wts, crd, con, misrot, xtalrot, strain, kor):
     '''
