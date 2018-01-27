@@ -408,11 +408,11 @@ def QuatOfRMat(rmat):
         else:
             raxis[:, anear0] = 1
 
-    special = angle > np.pi-tol
+    special = np.squeeze(angle > np.pi-tol)
     nspec = np.sum(special)
 
     if nspec > 0:
-        angle[special] = np.tile(np.pi, (1, nspec))
+        angle[special] = np.tile(np.pi, (nspec))
         if rsize[2] == 1:
             tmp = np.atleast_3d(rmat[:, :, 0])+np.tile(np.atleast_3d(np.identity(3)), (1, 1, nspec))
         else:
@@ -461,7 +461,7 @@ def RodOfQuat(quat):
          of the same rotations as quat
 
     '''
-
+    
     rod = quat[1:4, :]/np.tile(quat[0, :], (3, 1))
 
     return rod
@@ -491,7 +491,7 @@ def QuatOfRod(rod):
 
     rod =  utl.mat2d_row_order(rod)   
     
-    cphiby2 = np.cos(np.arctan(np.sqrt(np.sum(rod.conj()*rod, axis=0))))
+    cphiby2 = np.cos(np.arctan(np.linalg.norm(rod, axis=0)))
 
     quat = np.asarray([[cphiby2], np.tile(cphiby2, (3, 1))*rod])
 
@@ -572,7 +572,7 @@ def QuatMean(quats):
         mmat = 1/n*quats.T.dot(quats)
     bmmat = mmat - np.eye(4)
     
-    eig, eigvec = np.linalg(bmmat)
+    eig, eigvec = np.linalg.eig(bmmat)
     mquats = np.squeeze(eigvec[:, np.argmax(eig)])
     
     return mquats
@@ -601,11 +601,19 @@ def QuatOfAngleAxis(angle, raxis):
            rotations.  The first component of quat is nonnegative.
    '''
 
+    tol = 1.0e-5
+
+    #Errors can occur when this is near pi or negative pi
+    limit = np.abs(np.abs(angle) - np.pi) < tol
+    
+    angle[limit] = np.pi * np.sign(angle[limit])
+    
     halfAngle = 0.5*angle.T
     cphiby2 = np.atleast_2d(np.cos(halfAngle))
     sphiby2 = np.sin(halfAngle)
-    rescale = sphiby2/np.sqrt(np.sum(raxis.conj()*raxis, axis=0))
-    scaledAxis = np.tile(rescale, (3, 1))*raxis
+    scaledAxis = normalize(raxis, axis=0)*np.tile(sphiby2, (3,1))
+#    rescale = sphiby2/np.sqrt(np.sum(raxis.conj()*raxis, axis=0))
+#    scaledAxis = np.tile(rescale, (3, 1))*raxis
     quat = np.concatenate((cphiby2, scaledAxis), axis=0)
     q1neg = np.nonzero(quat[0, :] < 0)
     quat[:, q1neg] = -1*quat[:, q1neg]
