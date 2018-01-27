@@ -76,21 +76,18 @@ def bartonStats(misorient, locations, *wts):
     misOriCen = sph.SphereAverage(misorient, **{'wts':wts1})
     misorient = misorient - np.tile(misOriCen, (1, n))
     
-    ang = utl.mat2d_row_order(2*np.arccos(misorient[0, :]))
-    
-    wsc = np.zeros(ang.shape)
-    
     limit = (ang < np.finfo(float).eps)
     nlimit = (ang > np.finfo(float).eps)
     
-    angn = utl.mat2d_row_order(ang[nlimit])
+    angn = ang[nlimit]
     
-    sol = np.linalg.lstsq(np.sin(angn/2), angn)
-    
-    wsc[nlimit]= np.squeeze(sol[0])
+    wsc[nlimit]= angn/np.sin(angn/2)
     wsc[limit] = 2
     
     wi = misorient[1:4, :]*np.tile(wsc.T, (3, 1))
+    
+    wi = wi*np.tile(ang.T, (3,1))
+
     
     cen = utl.mat2d_row_order(np.sum(locations*wts, axis=1))
     
@@ -315,20 +312,21 @@ def misorientationStats(misorient, *wts):
     misorient = misorient - np.tile(misOriCen, (1, n))
     
     ang = utl.mat2d_row_order(2*np.arccos(misorient[0, :]))
-    
     wsc = np.zeros(ang.shape)
     
     limit = (ang < np.finfo(float).eps)
     nlimit = (ang > np.finfo(float).eps)
     
-    angn = utl.mat2d_row_order(ang[nlimit])
+    angn = ang[nlimit]
     
-    sol = np.linalg.lstsq(np.sin(angn/2), angn)
-    
-    wsc[nlimit]= np.squeeze(sol[0])
+    wsc[nlimit]= angn/np.sin(angn/2)
     wsc[limit] = 2
     
     wi = misorient[1:4, :]*np.tile(wsc.T, (3, 1))
+    
+    angax = np.zeros((4, n))
+    angax[0, :] = np.linalg.norm(wi, axis = 0)
+    angax[1:4, :] = normalize(wi, axis = 0)
     
     Winv = np.sum(utl.RankOneMatrix(wi*wts, wi), axis=2)
     
@@ -341,10 +339,6 @@ def misorientationStats(misorient, *wts):
             W = np.multiply(1e9, np.linalg.inv(Wtemp))
     else:
         W = np.linalg.inv(Winv)
-    
-    angax = np.zeros((4, n))
-    angax[0, :] = np.linalg.norm(wi, axis=0)
-    angax[1:4, :] = normalize(wi, axis=0)
     
     stat = {'W':W, 'Winv':Winv, 'wi':wi, 'angaxis':angax}
     
