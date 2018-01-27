@@ -75,6 +75,9 @@ def bartonStats(misorient, locations, *wts):
     wts1 = np.tile(wts[0, :], (4, 1))
     misOriCen = sph.SphereAverage(misorient, **{'wts':wts1})
     misorient = misorient - np.tile(misOriCen, (1, n))
+
+    ang = utl.mat2d_row_order(2*np.arccos(misorient[0, :]))
+    wsc = np.zeros(ang.shape)
     
     limit = (ang < np.finfo(float).eps)
     nlimit = (ang > np.finfo(float).eps)
