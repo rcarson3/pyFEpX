@@ -35,23 +35,21 @@ ndconn = fepxDM.mesh_node_conn(conn, ncrds)
 gbnodes, nincr = fepxDM.grain_boundary_nodes(ndconn, grains, ncrds)
 
 grain_gbnode_list = list()
-
+grain_neigh_list = list()
+#%%
 for igrain in ugrains:
+    print('###### Starting Grain Number '+str(igrain)+' ######')
     tmp = set()
+    tmp2 = set()
     for inode in gbnodes:
-        #Getting how many grains that node contained 
-        nnodes = inode.shape[1]
-        for i in range(nnodes):
-            #Iterating through that node and seeing if our grain of
-            #interest is here and if it is we simply add it to our tmp
-            #set
-            if inode[2, i] == igrain:
-                tmp.add(inode[0, i])
+        if igrain in gbnodes[inode]:
+            tmp.add(inode)
+            tmp2.update(list(gbnodes[inode].keys()))
     #Once we've iterated through all of the grain boundary nodes we append
-    #our temporary set to the grain gb node list           
+    #our temporary set to the grain gb node list 
+    tmp2.remove(igrain)          
     grain_gbnode_list.append(tmp)
-    
-grain_gbelem_list = list() 
+    grain_neigh_list.append(tmp2)
    
 for i in ugrains:
     print('###### Starting Grain Number '+str(i)+' ######')

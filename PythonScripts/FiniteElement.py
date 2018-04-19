@@ -1224,7 +1224,7 @@ def superconvergence_mat(NTN, qpt_det, conn, ncrds):
     nelems = conn.shape[0]
     nqpts = NTN.shape[2]
     nnpe = NTN.shape[0]
-    amat = np.zeros((ncrds, ncrds))
+    amat = np.zeros((ncrds, ncrds), dtype='float64', order='F')
     
     for i in range(nelems):
         for j in range(nqpts):
@@ -1254,9 +1254,10 @@ def superconvergence_vec(NT, qpt_det, conn, qpt_vec, ncrds):
     nelems = conn.shape[0]
     nvec = qpt_vec.shape[1]
     nnpe = conn.shape[1]
-    bvec = np.zeros((ncrds, nvec))
-    tarr = np.zeros((nqpts))
-    tind = np.zeros((nnpe), dtype='int32')
+    
+    bvec = np.zeros((ncrds, nvec), dtype='float64', order='F')
+    tarr = np.zeros((nqpts), dtype='float64', order='F')
+    tind = np.zeros((nnpe), dtype='int32', order='F')
     
     for i in range(nvec):
         for j in range(nelems):
@@ -1265,9 +1266,37 @@ def superconvergence_vec(NT, qpt_det, conn, qpt_vec, ncrds):
             bvec[tind, i] = bvec[tind, i] + NT.dot(tarr)
             
     return bvec
+
+def superconvergence_gr_nnlstq(amat, bvec, ncrds):
+    '''
+        Inputs:
+                conn - the local connectivity array a nelem x 10 size array
+                q_mat - vector at each quad point
+                        size = nqpts x nvec x nelems
+                ncrds - number of coordinates/nodal points in the grain
+        Output:
+                nod_agamma - the nodal values of a grain for the q_mat
+                residual - the residual from the least squares
+                
+        A nonnegative nonlinear least squares optimization routine is used to solve for
+        the solution. It'll find the nodal values of the absolute q_mat for
+        a grain.
+    '''
+    
+    nvec =  bvec.shape[1]
+
+    nod_mat = np.zeros((ncrds, nvec), dtype='float64', order='F')
+    b = np.zeros((ncrds), dtype='float64', order='C')
+    residual = np.zeros((nvec), dtype='float64', order='F')
+    
+    for i in range(nvec):
+        b[:] = bvec[:, i]
+        nod_mat[:, i], residual[i] = sciop.nnls(amat, b)
+        
+    return (nod_mat.T, residual)
     
 
-def superconvergnce_solve(amat, bvec):
+def superconvergence_solve(amat, bvec):
     '''
     Solves the superconvergence patch test problem to obtain values at the
     nodal coordinates
@@ -1280,7 +1309,141 @@ def superconvergnce_solve(amat, bvec):
     
     xvec = np.linalg.solve(amat, bvec)
 
-    return xvec.T 
+    return xvec.T
+
+def superconvergence_solve_cg(NTN, qpt_det, bvec, conn, ncrds):
+    '''
+    Solves the superconvergence patch test problem to obtain values at the
+    nodal coordinates using a preconditioned conjugate gradient solver.
+    Input:
+        NTN - the shape function transpose shape function outer product
+            matrix with dimensions - nnpe x nnpe x nqpts
+        qpt_det - the determinate of the jacobian matrix for each
+                quadrature point of an element - dimensions nelem x nqpts
+        bvec - the integration of NT*qpt_vec over the domain product
+            size is ncrds x nvec
+        conn - the connectivity array
+        ncrds - the number of coordinates
+    Output:
+        xvec - our superconvergence nodal solutions with a size of ncrds x nvec
+    '''
+
+    nelems = conn.shape[0]
+    nvec = bvec.shape[1]
+    nnpe = conn.shape[1]
+    nqpts = NTN.shape[2]    
+    mvec = np.zeros((ncrds, 1), dtype='float64', order='F')
+    tind = np.zeros((nnpe), dtype='int32')
+    xvec = np.zeros((ncrds, nvec), dtype='float64', order='F')
+    
+#    We need to first form our preconditioner. A simple Jacobi is good enough
+#    for our use since our elements results in a pretty sparse and blocked
+#    series of events of our elements.
+    for i in range(nelems):
+        tind[:] = conn[i, :]
+        for j in range(nqpts):
+            #The diagonal of our element series
+            diag_NTN = np.diag(NTN[:, :, j])
+            mvec[tind] = mvec[tind] + diag_NTN[:] * qpt_det[i, j]
+    
+    #The inverse of our preconditioner    
+    inv_mvec = 1.0/mvec[:]
+    #Here we're going to start our pcg solver
+    for i in range(nvec):
+        xvec[:, i] = superconvergence_block_pcg(NTN, qpt_det, inv_mvec, bvec[:, i], conn, ncrds)
+        
+    return xvec
+    
+    
+    
+def superconvergence_block_pcg(NTN, qpt_det, inv_mvec, bvec, conn, ncrds):
+    '''
+    Solves the superconvergence patch test problem to obtain values at the
+    nodal coordinates using a preconditioned conjugate gradient solver.
+    Input:
+        NTN - the shape function transpose shape function outer product
+            matrix with dimensions - nnpe x nnpe x nqpts
+        qpt_det - the determinate of the jacobian matrix for each
+                quadrature point of an element - dimensions nelem x nqpts
+        bvec - the integration of NT*qpt_vec over the domain product
+            size is ncrds x 1
+        conn - the connectivity array
+        ncrds - the number of coordinates
+    Output:
+        xvec - our superconvergence nodal solutions with a size of ncrds x 1
+    '''
+    
+    tol = 1.0e-14
+    
+    nelems = conn.shape[0]
+    nnpe = conn.shape[1]
+    nqpts = NTN.shape[2] 
+    
+    tind = np.zeros((nnpe), dtype='int32')
+    tmat = np.zeros((nnpe), dtype='float64', order='F')
+    
+    rk  = np.zeros((ncrds, 1), dtype='float64', order='F')
+    rk1 = np.zeros((ncrds, 1), dtype='float64', order='F')
+    zk  = np.zeros((ncrds, 1), dtype='float64', order='F')
+    zk1 = np.zeros((ncrds, 1), dtype='float64', order='F')
+    pk  = np.zeros((ncrds, 1), dtype='float64', order='F')
+    xk  = np.zeros((ncrds, 1), dtype='float64', order='F')
+    pak = np.zeros((ncrds, 1), dtype='float64', order='F') 
+    
+    rk[:, 0] = bvec[:]
+    
+    k = 0
+    
+    err = np.zeros((1), dtype='float64', order='F')
+    mu = np.zeros((1), dtype='float64', order='F')
+    tau = np.zeros((1), dtype='float64', order='F')
+    
+    #The below should return 0 the first time its called subsequent trials
+    #won't result in a zero value though
+    for i in range(nelems):
+        tind[:] = conn[i, :]
+        tmat[:, :] = 0.0
+        for j in range(nqpts):
+            tmat[:, :] = tmat[:, :] + NTN[:, :, j] * qpt_det[i, j]
+        rk[tind, 0] = rk[tind, 0] - tmat.dot(xk[tind, 0])
+        
+    zk[:] = inv_mvec[:] * rk[:]
+    pk[:] = zk[:]
+    
+        
+    #We will break out of this if the error is below the tolerance value    
+    for i in range(ncrds):
+        pak[:] = 0.0
+        #The Apk product is calculated here
+        for j in range(nelems):
+            tind[:] = conn[j, :]
+            tmat[:, :] = 0.0
+            for k in range(nqpts):
+                tmat[:, :] = tmat[:, :] + NTN[:, :, k] * qpt_det[j, k]
+            pak[tind, 0] = pak[tind, 0] + tmat.dot(pk[tind, 0])
+        #We should only perform the top operation once
+        #We use it down below as rk1.T.dot(zk1)
+        mu = (rk.T.dot(zk))/(pk.T.dot(pak))
+        
+        xk[:] = xk[:] - mu * pk[:]
+        
+        rk1[:] = rk[:]
+        rk[:] = rk[:] - mu * pak[:]
+        
+        zk1[:] = zk[:]
+        zk[:]  = inv_mvec[:] * rk[:]
+        #We should set this top part as the new operation that's used above
+        tau = (rk.T.dot(zk))/(rk1.T.dot(zk1))
+        pk[:] = zk[:] + tau * pk[:]
+        
+        err = np.squeeze(rk.T.dot(rk))
+        
+        if np.abs(err) < tol:
+            break
+    
+    return np.squeeze(xk)
+    
+    
 
 def jacobian_lin(mesh):
     '''

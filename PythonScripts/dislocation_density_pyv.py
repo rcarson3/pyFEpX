@@ -21,12 +21,15 @@ fileLoc = '/Volumes/My Passport for Mac/Simulations/LOFEM_Study/n456_cent_m15/mi
 fileName = 'n456-cent-rcl04'
 #fileName = 'n456_nf_raster_L2_r1_v2_rcl075'
 #fileName = 'n6'
+#This will be the base name that you want all of your data saved off to.
+#The file name will look something like gr_dd####.data where the #### are the actual
+#grain numbers
 fBname = 'gr_dd'
 
 #fileLoc = '/media/robert/DataDrives/n1k_pois_iso_reg_pt2/'
 #fileName = 'n1k-id6k-rcl05'
 
-
+#Here we have our number of processors and number of steps in our simulation
 nproc = 64
 #nsteps = 19
 #nsteps = 46
@@ -38,10 +41,9 @@ nsteps = 44
 #nsteps = 86
 
 frames = np.arange(0,nsteps)
-#Uncomment the below line for the LOFEM Refactored data sets
-#then make sure to comment out the line below it.
-#mesh = fepxDM.readMesh(fileLoc, fileName, LOFEM = True)
-mesh = fepxDM.readMesh(fileLoc, fileName)
+
+mesh = fepxDM.readMesh(fileLoc, fileName, LOFEM = True)
+
 
 #ngrains = 6
 ngrains = 456
@@ -54,7 +56,7 @@ grains = np.r_[1:(ngrains+1)]
 #data
 print('About to start processing data')
 kor = 'rod'
-#ldata = fepxDM.readLOFEMData(fileLoc, nproc, lofemData=['strain', 'ang'])
+ldata = fepxDM.readLOFEMData(fileLoc, nproc, lofemData=['ang'])
 print('Starting to read DISC data')
 data = fepxDM.readData(fileLoc, nproc, fepxData=['adx'])
 print('Finished Reading DISC data')
@@ -158,24 +160,14 @@ ngdot = 12
 for i in grains:
     print('###### Starting Grain Number '+str(i)+' ######')
     
-    gdata = fepxDM.readGrainData(fileLoc, i, frames=None, grData=['ang'])
-    
     lcon, lcrd, ucon, uelem = fe.localConnectCrd(mesh, i)
+    lcon2, ucon2, uelem2 = fe.localGrainConnectCrd(mesh, i)
     
     nel = lcon.shape[1]
     ncrd = ucon.shape[0]
     
     indlog = mesh['grains'] == i
-    
-#    lcon, lcrd, ucon, uelem = fe.localConnectCrd(mesh, i)
-#    lcon2, ucon2, uelem2 = fe.localGrainConnectCrd(mesh, i)
-#    
-#    nel = lcon.shape[1]
-#    npts = ucon.shape[0]
-#    
-#    indlog = mesh['grains'] == i
-#    indlog2 = mesh['crd_grains'] == i
-    
+    indlog2 = mesh['crd_grains'] == i
     
     strgrnum = np.char.mod('%4.4d', np.atleast_1d(i))[0]
     
@@ -192,32 +184,36 @@ for i in grains:
     
     ang_axis = np.zeros((dim, ncrd, nsteps), dtype='float64', order='F')
     
-    #Realized the Nye Tensor is based upon the axial vector and not
-    #a Rod vec so need to update the code to take note of this being the case
+    #The Nye Tensor is based on our angle axis representation so we need
+    #to rotate from a rod vec to angle axis
     for j in range(nsteps):
-        ang_axis[:,:,j] = rot.AngleAxisOfRod(gdata['angs'][:,:,j])
+        ang_axis[:,:,j] = rot.AngleAxisOfRod(ldata['angs'][:,indlog2,j])
     
     for j in range(nsteps):
         
         crd[:,:] = np.squeeze(data['coord'][:,ucon, j]).T 
-        
+        #Creating an array that contains our coords for each element
+        #Creates an array that has an array of our orientations for each element
         for k in range(nel):
             elem_crd[:, :, k] = crd[lcon[:, k], :]
-            el_vec[:, :, k] = ang_axis[:, lcon[:, k], j]
-            
+            el_vec[:, :, k] = ang_axis[:, lcon2[:, k], j]
+        #Here we're obtaining our local dN/dX versions of our shape function along with our
+        # jacobian at the middle quadrature point    
         loc_dndx[:,:,:], det_qpt[:] = fe.local_gradient_shape_func(iso_dndx, elem_crd, 4)
+        #Here we're getting the gradient of our vector data and from that the Nye tensor
         vec_grad = fe.get_vec_grad(el_vec, loc_dndx)
         nye_ten = fe.get_nye_tensor(vec_grad)
-        
+        #Here we're calculating the Nye tensor using the L2 norm method given in
+        #the 1999 Arsenlis paper of dislocations
         density = fe.get_l2_norm_dd(nye_ten, lmat)
         
-        
+        #Here we're just saving our data off
         with open(fileLoc+fBname+strgrnum+'.data','ab') as f_handle:
             f_handle.write(bytes('%Grain step'+str(j)+'\n','UTF-8'))
             for k in range(nel):
                 np.savetxt(f_handle,density[:, k], newline=' ')
                 f_handle.write(bytes('\n','UTF-8'))
                 
-#        print('Grain #'+str(i)+'% done:  {:.3f}'.format(((j+1)/nsteps)))
+       print('Grain #'+str(i)+'% done:  {:.3f}'.format(((j+1)/nsteps)))
         
            

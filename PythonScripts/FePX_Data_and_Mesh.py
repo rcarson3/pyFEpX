@@ -16,7 +16,6 @@ fixStrain(epsVec)
 findComments(fileLoc)
 selectFrameTxt(fileLoc, frames, comments='%')
 '''
-
 def readMesh(fileLoc, fileName, LOFEM=False):
     ''' 
         Takes in the file location and file name and it then generates a dictionary structure from those files for the mesh.
@@ -65,9 +64,12 @@ def readMesh(fileLoc, fileName, LOFEM=False):
                 nums = wordParser(words)
                 con.append(nums[1:11])
 
-    grains = ta.genfromtxt(grainLoc, usecols=(0), skip_header=1, skip_footer=0)
-    phases = ta.genfromtxt(grainLoc, usecols=(1), skip_header=1, skip_footer=0)
-    kocks = ta.genfromtxt(kockLoc, usecols=(0, 1, 2), skip_header=2, skip_footer=1)
+    grains = np.genfromtxt(grainLoc, usecols=(0), skip_header=1, skip_footer=0)
+    ugrains = np.unique(grains)
+    phases = np.genfromtxt(grainLoc, usecols=(1), skip_header=1, skip_footer=0)
+    kocks = np.genfromtxt(kockLoc, usecols=(0, 1, 2), skip_header=2, skip_footer=1)
+    if not kocks.shape[0] == ugrains.shape[0]:
+        kocks = np.genfromtxt(kockLoc, usecols=(0, 1, 2), skip_header=2, skip_footer=0)
     mesh['con'] = np.require(np.asarray(con, order='F', dtype=np.int32).transpose(), requirements=['F'])
     mesh['crd'] = np.require(np.asarray(crd, order='F').transpose(), requirements=['F'])
     mesh['surfaceNodes'] = np.require(np.asarray(surfaceNodes, order='F',dtype=np.int32).transpose(), requirements=['F'])
@@ -98,7 +100,7 @@ def mesh_node_neigh(conn, nd_conn):
                nd_conn = a list of sets for each node and what elems they
                        are connected to
                
-        Output: nd_neigh = a numpy list of sets of a nodes neighbors
+        Output: nd_neigh = a list of sets of a nodes neighbors
         
         Note: This should work but it still needs a slightly more extensive testing
     '''
@@ -201,9 +203,9 @@ def grain_boundary_nodes(ndconn, grains, nnode):
            grains = a numpy array corresponding to what grain each element is
                 in
            nnode = the number of nodes in the mesh
-    Output: gbnodes = a list of numpy arrays where each numpy array contains
-                the following info for each node: orig coord index, new coord index,
-                grain it belongs to. 
+    Output: gbnodes = a dictionary of dictionary. The first key is the original
+                      node number and the second key is the grain number for that
+                      node. It will then return the new node number
             nincr = a numpy array containing the number of increments made
                 for each node. This can be used for many things and one
                 such thing is finding the GB elements by finding the elements
@@ -222,30 +224,27 @@ def grain_boundary_nodes(ndconn, grains, nnode):
         #The node doesn't need to be incremented if it isn't on a GB.
         nincr[i] = ugrns.shape[0] - 1
         
-    nodes = np.where(nincr > 0)[0]
+    nodes = np.int32(np.where(nincr > 0)[0])
     #Going ahead and initiallizing our set all at once
-    gbnodes = [np.zeros((3, nincr[i]+1), dtype='int32') for i in nodes]
-    k = 0
+#    gbnodes = [np.zeros((3, nincr[i]+1), dtype='int32') for i in nodes]
+    gbnodes = dict.fromkeys(nodes, {})
+
+
     #Cycle through the index of all the nodes that were on the boundary
     for i in nodes:
         #We want a numpy array of all the elements connected to that node
         ndelems =  np.array(list(ndconn[i]), dtype='int32')
         #We also want to know how many unique grains we actually have
         ugrns = np.unique(grains[ndelems])
+        gbnodes[i] = dict.fromkeys(ugrns, None)
         tmp = set()
         for j in ndelems:
             #Finally we increment the conn array
             new_index = incr + i + np.where(ugrns == grains[j])[0][0]
             tmp.add((i, new_index, grains[j]))
             
-        l = 0
         for item in tmp:
-            gbnodes[k][0, l] = np.int32(item[0])
-            gbnodes[k][1, l] = np.int32(item[1])
-            gbnodes[k][2, l] = np.int32(item[2])
-            l = l + 1
-            
-        k = k + 1
+            gbnodes[i][np.int32(item[2])] = np.int32(item[1])
         
         incr = incr + nincr[i]
 
@@ -260,6 +259,37 @@ def grain_boundary_elements(nincr, gbnodes, nd_conn, nd_conn_gr, conn, grain):
     updated nodal connectivity array which will be used to generate the
     connectivity array for the surface grain boundary elements. Finally,
     it will output a list of the GB element index and its paired element.
+    Input:
+        gbnodes   =  a dictionary of dictionary. The first key is the original
+                      node number and the second key is the grain number for that
+                      node. It will then return the new node number 
+        nincr     = a numpy array containing the number of increments made
+                    for each node. This can be used for many things and one
+                    such thing is finding the GB elements by finding the elements
+                    with 6 or more GB nodes
+        ndconn    = a list of sets for each node and what elems they are
+                     connected to
+        conn      = a numpy array of the mesh element connectivity array
+        grain     = a numpy array corresponding to what grain each element is
+                    in
+        ndconn_gr = a list of sets for each node after being renumbered for 
+                    so that gb nodes are on seperate nodes 
+                    and what elems they are connected to
+                    
+    Output:
+        gb_elems    = A numpy array of all of the elements on the grain boundary with
+                      6 or more nodes on the surface. In other words we want
+                      to know what elements have an element face on the grain
+                      boundary.
+        gb_conn     = The element connectivity array for each grain boundary
+                      element. It allows for the reconstruction of the triangular
+                      prism elements. It is given as a numpy array. The last
+                      two elements in the array tell us what elements correspond
+                      to that particular connectivity array.
+        gb_elem_set = A set of frozen sets that contains all of grain boundary
+                      element pairs. One can then use this in conjunction with
+                      the gb_conn to build up our grain boundary surface elements.
+                      It could also be used in a number of different areas.        
     '''
     
     nelems = conn.shape[1]
@@ -273,13 +303,15 @@ def grain_boundary_elements(nincr, gbnodes, nd_conn, nd_conn_gr, conn, grain):
         nsurfs[i] = tincr
         
     gb_elems = np.where(nsurfs > 5)[0]
+    gb_elems_iter = np.where(nsurfs > 5)[0]
     surf_index = np.zeros((gb_elems.shape[0], 5), dtype=np.int32)
     
     j = 0
-    for i in gb_elems:
+    for i in gb_elems_iter:
         tconn = np.squeeze(conn[:, i])
         index = np.where(nincr[tconn] > 0)[0]
         surf_index[j, 4] = i
+        tmp = 0
         #surface 1 of 10 node tet
         if(np.any(index == 1) & np.any(index == 5)):
             i0 = tconn[0]
@@ -288,11 +320,18 @@ def grain_boundary_elements(nincr, gbnodes, nd_conn, nd_conn_gr, conn, grain):
             i3 = tconn[3]
             i4 = tconn[4]
             i5 = tconn[5]
-            
-            s1 = nd_conn[i0] & nd_conn[i1] & nd_conn[i2] & nd_conn[i3] & nd_conn[i4] & nd_conn[i5]
-            surf_index[j, 0] = list(s1 - {i})[0]
-            
-            gb_elem_set.add(frozenset(s1))
+            #All need to be on the surface
+            gb_surf_test = (i0 in gbnodes) & (i1 in gbnodes) & (i2 in gbnodes) & (i3 in gbnodes) & (i4 in gbnodes) & (i5 in gbnodes)
+            if gb_surf_test:
+                #Finds the intersection of the 6 different node set
+                s1 = nd_conn[i0] & nd_conn[i1] & nd_conn[i2] & nd_conn[i3] & nd_conn[i4] & nd_conn[i5]
+                #We need to check that the length is greater than 1 if it isn't than we toss
+                #that point
+                ugrns = np.unique(grain[list(s1)])
+                if(len(s1) > 1) & (ugrns.shape[0] > 1):
+                    tmp = tmp + 1
+                    surf_index[j, 0] = list(s1 - {i})[0]
+                    gb_elem_set.add(frozenset(s1))
         #surface 2 of 10 node tet
         if(np.any(index == 1) & np.any(index == 9)):
             i0 = tconn[0]
@@ -301,11 +340,19 @@ def grain_boundary_elements(nincr, gbnodes, nd_conn, nd_conn_gr, conn, grain):
             i3 = tconn[7]
             i4 = tconn[9]
             i5 = tconn[6]
-            
-            s1 = nd_conn[i0] & nd_conn[i1] & nd_conn[i2] & nd_conn[i3] & nd_conn[i4] & nd_conn[i5]
-            surf_index[j, 1] = list(s1 - {i})[0]
-            
-            gb_elem_set.add(frozenset(s1))
+            #All need to be on the surface
+            gb_surf_test = (i0 in gbnodes) & (i1 in gbnodes) & (i2 in gbnodes) & (i3 in gbnodes) & (i4 in gbnodes) & (i5 in gbnodes)
+            if gb_surf_test:
+                #Finds the intersection of the 6 different node set
+                s1 = nd_conn[i0] & nd_conn[i1] & nd_conn[i2] & nd_conn[i3] & nd_conn[i4] & nd_conn[i5]
+                #We need to check that the length is greater than 1 if it isn't than we toss
+                #that point. It also turns out that somehow we could end up with elements that are on the
+                #same grain. I'm not sure how since they should all be unique.
+                ugrns = np.unique(grain[list(s1)])
+                if(len(s1) > 1) & (ugrns.shape[0] > 1):
+                    tmp = tmp + 1
+                    surf_index[j, 1] = list(s1 - {i})[0]
+                    gb_elem_set.add(frozenset(s1))
         #surface 3 of 10 node tet
         if(np.any(index == 3) & np.any(index == 9)):
             i0 = tconn[2]
@@ -314,11 +361,18 @@ def grain_boundary_elements(nincr, gbnodes, nd_conn, nd_conn_gr, conn, grain):
             i3 = tconn[8]
             i4 = tconn[9]
             i5 = tconn[7]
-            
-            s1 = nd_conn[i0] & nd_conn[i1] & nd_conn[i2] & nd_conn[i3] & nd_conn[i4] & nd_conn[i5]
-            surf_index[j, 2] = list(s1 - {i})[0]
-            
-            gb_elem_set.add(frozenset(s1))
+            #All need to be on the surface
+            gb_surf_test = (i0 in gbnodes) & (i1 in gbnodes) & (i2 in gbnodes) & (i3 in gbnodes) & (i4 in gbnodes) & (i5 in gbnodes)
+            if gb_surf_test:
+                #Finds the intersection of the 6 different node set         
+                s1 = nd_conn[i0] & nd_conn[i1] & nd_conn[i2] & nd_conn[i3] & nd_conn[i4] & nd_conn[i5]
+                #We need to check that the length is greater than 1 if it isn't than we toss
+                #that point
+                ugrns = np.unique(grain[list(s1)])
+                if(len(s1) > 1) & (ugrns.shape[0] > 1):
+                    tmp = tmp + 1
+                    surf_index[j, 2] = list(s1 - {i})[0]
+                    gb_elem_set.add(frozenset(s1))
         #surface 4 of 10 node tet
         if(np.any(index == 5) & np.any(index == 9)):
             i0 = tconn[4]
@@ -327,25 +381,38 @@ def grain_boundary_elements(nincr, gbnodes, nd_conn, nd_conn_gr, conn, grain):
             i3 = tconn[6]
             i4 = tconn[9]
             i5 = tconn[8]
-            
-            s1 = nd_conn[i0] & nd_conn[i1] & nd_conn[i2] & nd_conn[i3] & nd_conn[i4] & nd_conn[i5]
-            surf_index[j, 3] = list(s1 - {i})[0]
-            
-            gb_elem_set.add(frozenset(s1))
-      
-        j = j + 1
+            #All need to be on the surface
+            gb_surf_test = (i0 in gbnodes) & (i1 in gbnodes) & (i2 in gbnodes) & (i3 in gbnodes) & (i4 in gbnodes) & (i5 in gbnodes)
+            if gb_surf_test:
+                #Finds the intersection of the 6 different node set
+                s1 = nd_conn[i0] & nd_conn[i1] & nd_conn[i2] & nd_conn[i3] & nd_conn[i4] & nd_conn[i5]
+                #We need to check that the length is greater than 1 if it isn't than we toss
+                #that point
+                ugrns = np.unique(grain[list(s1)])
+                if(len(s1) > 1) & (ugrns.shape[0] > 1):
+                    tmp = tmp + 1
+                    surf_index[j, 3] = list(s1 - {i})[0]  
+                    gb_elem_set.add(frozenset(s1))
+        #We need to check and make sure that if a grain boundary element
+        #is actually a grain boundary element.
+        #If it did not share a face at all then we remove it from the grain
+        #boundary element array
+        if(tmp > 0):
+            j = j + 1
+        else:
+            gb_elems = gb_elems[gb_elems != i]
         
     nsurf_elems = len(gb_elem_set)
     
     gb_conn = np.zeros((14, nsurf_elems), dtype=np.int32)
     
-    nb_gbnodes = len(gbnodes)
+#    nb_gbnodes = len(gbnodes)
     
     j = 0
     for gb_els in gb_elem_set:
         elems = np.asarray(list(gb_els), dtype=np.int32)
         gb_conn[12:14, j] = elems
-        tgrains = grain[elems]
+        tgrains = np.int32(grain[elems])
         
         ind2 = np.where(elems[0] == np.squeeze(surf_index[:,4]))[0]
         surf = np.where(elems[1] == np.squeeze(surf_index[ind2, 0:4]))[0]
@@ -360,7 +427,7 @@ def grain_boundary_elements(nincr, gbnodes, nd_conn, nd_conn_gr, conn, grain):
         else:
             ind = np.asarray([4,5,5,6,9,8]) 
                     
-        nodes_orig = np.squeeze(tconn[ind])
+        nodes_orig = np.int32(np.squeeze(tconn[ind]))
         
         i1 = nodes_orig[0]
         i2 = nodes_orig[1]
@@ -372,61 +439,24 @@ def grain_boundary_elements(nincr, gbnodes, nd_conn, nd_conn_gr, conn, grain):
         #Manual creation of the index since there's no easy way to do this
         #through the use of a loop with the current ordering of the conn
         #array
-        ind1, ind2 = search_gbnodes(gbnodes, i1, tgrains[0], nb_gbnodes)
-        gb_conn[0, j] = gbnodes[ind1][1, ind2]
+        gb_conn[0, j] = gbnodes[i1][tgrains[0]]
+        gb_conn[6, j] = gbnodes[i2][tgrains[0]]        
+        gb_conn[1, j] = gbnodes[i3][tgrains[0]]        
+        gb_conn[7, j] = gbnodes[i4][tgrains[0]]        
+        gb_conn[2, j] = gbnodes[i5][tgrains[0]]        
+        gb_conn[8, j] = gbnodes[i6][tgrains[0]]
         
-        ind1, ind2 = search_gbnodes(gbnodes, i2, tgrains[0], nb_gbnodes)
-        gb_conn[6, j] = gbnodes[ind1][1, ind2]
-        
-        ind1, ind2 = search_gbnodes(gbnodes, i3, tgrains[0], nb_gbnodes)
-        gb_conn[1, j] = gbnodes[ind1][1, ind2]
-        
-        ind1, ind2 = search_gbnodes(gbnodes, i4, tgrains[0], nb_gbnodes)
-        gb_conn[7, j] = gbnodes[ind1][1, ind2]
-        
-        ind1, ind2 = search_gbnodes(gbnodes, i5, tgrains[0], nb_gbnodes)
-        gb_conn[2, j] = gbnodes[ind1][1, ind2]
-        
-        ind1, ind2 = search_gbnodes(gbnodes, i6, tgrains[0], nb_gbnodes)
-        gb_conn[8, j] = gbnodes[ind1][1, ind2]
-        
-        ind1, ind2 = search_gbnodes(gbnodes, i1, tgrains[1], nb_gbnodes)
-        gb_conn[3, j] = gbnodes[ind1][1, ind2]
-        
-        ind1, ind2 = search_gbnodes(gbnodes, i2, tgrains[1], nb_gbnodes)
-        gb_conn[9, j] = gbnodes[ind1][1, ind2]
-        
-        ind1, ind2 = search_gbnodes(gbnodes, i3, tgrains[1], nb_gbnodes)
-        gb_conn[4, j] = gbnodes[ind1][1, ind2]
-        
-        ind1, ind2 = search_gbnodes(gbnodes, i4, tgrains[1], nb_gbnodes)
-        gb_conn[10, j] = gbnodes[ind1][1, ind2]
-        
-        ind1, ind2 = search_gbnodes(gbnodes, i5, tgrains[1], nb_gbnodes)
-        gb_conn[5, j] = gbnodes[ind1][1, ind2]
-        
-        ind1, ind2 = search_gbnodes(gbnodes, i6, tgrains[1], nb_gbnodes)
-        gb_conn[11, j] = gbnodes[ind1][1, ind2]
+        gb_conn[3, j] = gbnodes[i1][tgrains[1]]        
+        gb_conn[9, j] = gbnodes[i2][tgrains[1]]        
+        gb_conn[4, j] = gbnodes[i3][tgrains[1]]
+        gb_conn[10, j] = gbnodes[i4][tgrains[1]]
+        gb_conn[5, j] = gbnodes[i5][tgrains[1]]        
+        gb_conn[11, j] = gbnodes[i6][tgrains[1]]
         
         j = j + 1
             
     
     return (gb_elems, gb_conn, gb_elem_set)
-
-def search_gbnodes(gbnodes, node, grain, ngbnodes):
-    '''
-    helper function for grain_boundary_elements
-    '''
-    
-    ind1 = 0
-    ind2 = 0
-    
-    for i in range(ngbnodes):
-        if gbnodes[i][0,0] == node:
-            ind1 = i
-            ind2 = np.where(gbnodes[i][2,:] == grain)[0]
-            
-    return (ind1, ind2)
 
 def wordParser(listVals):
     '''
@@ -476,9 +506,17 @@ def readData(fileLoc, nProc, frames=None, fepxData=None, restart=False):
         fepxData = ['ang', 'strain', 'stress', 'adx', 'advel', 'dpeff', 'eqplstrain', 'crss']
         flDflt = True
     if frames is None:
-        file = fileLoc + 'post.' + 'stress' + '.0'
+        fName = fepxData[0]
+        file = fileLoc + 'post.' + fName + '.0'
         nFrames = findComments(file)
-        frames = np.arange(1, nFrames + 1)
+        if fName == 'ang' or fName == 'adx' or fName == 'advel' or fName == 'crss' or fName == 'rod':
+            if restart:
+                frames = np.arange(1, nFrames + 1)
+            else:
+                frames = np.arange(1, nFrames)
+                nFrames = nFrames - 1
+        else: 
+            frames = np.arange(1, nFrames + 1)
         frDflt = True
     else:
         nFrames = np.size(frames)
@@ -568,6 +606,41 @@ def readData(fileLoc, nProc, frames=None, fepxData=None, restart=False):
 
     return data
 
+def mpi_partioner(nprocs, ncrds, nelems):
+    '''
+    Returns the ncrd and nelem partion per processor
+    '''
+    
+    proc_elems = np.zeros((nprocs), dtype='int32')
+    proc_crds = np.zeros((nprocs), dtype='int32')
+    
+    for i in range(nprocs):
+        nlocal  = np.int(nelems / nprocs)
+        s       = i * nlocal + 1
+        deficit = nelems%nprocs
+        s       = s + min(i, deficit)
+        if (i < deficit):
+            nlocal = nlocal + 1
+        e = s + nlocal - 1
+        if ((e > nelems) or (i == (nprocs - 1))):
+            e = nelems
+            
+        proc_elems[i] = e - s + 1
+        
+        nlocal  = np.int(ncrds / nprocs)
+        s       = i * nlocal + 1
+        deficit = ncrds%nprocs
+        s       = s + min(i, deficit)
+        if (i < deficit):
+            nlocal = nlocal + 1
+        e = s + nlocal - 1
+        if ((e > ncrds) or (i == (nprocs - 1))):
+            e = ncrds
+            
+        proc_crds[i] = e - s + 1
+    
+    return (proc_elems, proc_crds)
+
 def readGrainData(fileLoc, grainNum, frames=None, grData=None):
     '''
         Reads in the grain data that you are interested in. It can read the
@@ -649,7 +722,7 @@ def readGrainData(fileLoc, grainNum, frames=None, grData=None):
         
     return data
 
-def readLOFEMData(fileLoc, nProc, nqpts=15, frames=None, lofemData=None):
+def readLOFEMData(fileLoc, nProc, nstps=None, nelems=None, ncrds=None, nqpts=15, frames=None, lofemData=None, restart=False):
     '''
         Reads in the data files that you are interested in across all the processors
         and only for the frames that you are interested in as well
@@ -683,12 +756,38 @@ def readLOFEMData(fileLoc, nProc, nqpts=15, frames=None, lofemData=None):
         lofemData = ['strain', 'stress', 'crss', 'agamma', 'ang']
         flDflt = True
     if frames is None:
-        file = fileLoc + 'lofem.' + 'stress' + '.0'
-        nFrames = findComments(file)
-        frames = np.arange(1, nFrames + 1)
+        if nstps is None:
+            fName = lofemData[0]
+            if fName == 'ang':
+                strgrnum = np.char.mod('%4.4d', np.atleast_1d(0))[0]
+                file = fileLoc + 'gr_' + fName + strgrnum + '.rod'
+            else:
+                file = fileLoc + 'lofem.' + fName + '.0'
+            nFrames = findComments(file)
+            if fName == 'ang' or fName == 'adx' or fName == 'advel' or fName == 'crss' or fName == 'rod':
+                if restart:
+                    frames = np.arange(1, nFrames + 1)
+                else:
+                    frames = np.arange(1, nFrames)
+                    nFrames = nFrames - 1
+            else: 
+                frames = np.arange(1, nFrames + 1)
         frDflt = True
     
     else:
+        if nstps is None:
+            fName = lofemData[0]
+            if fName == 'ang':
+                strgrnum = np.char.mod('%4.4d', np.atleast_1d(0))[0]
+                file = fileLoc + 'gr_' + fName + strgrnum + '.rod'
+            else:
+                file = fileLoc + 'lofem.' + fName + '.0'
+            nstps = findComments(file)
+            if fName == 'ang' or fName == 'adx' or fName == 'advel' or fName == 'crss' or fName == 'rod':
+                if not restart:
+                    nstps = nstps - 1
+#            frames = np.arange(1, nstps + 1)
+        proc_elems, proc_crds = mpi_partioner(nProc, ncrds, nelems)
         nFrames = np.size(frames)
         frames = np.asarray(frames) + 1
     for fName in lofemData:
@@ -699,6 +798,8 @@ def readLOFEMData(fileLoc, nProc, nqpts=15, frames=None, lofemData=None):
         tFrames = []
         if fName == 'ang' or fName == 'adx' or fName == 'advel' or fName == 'crss' or fName == 'rod':
             tnf = nFrames + 1
+            if restart:
+                tnf = nFrames
             tFrames = frames.copy()
             if (not frDflt):
                 tFrames = np.concatenate(([1], tFrames))
@@ -719,7 +820,19 @@ def readLOFEMData(fileLoc, nProc, nqpts=15, frames=None, lofemData=None):
             if frDflt:
                 tmp = ta.genfromtxt(fLoc, comments='%')
             else:
-                tmp = selectFrameTxt(fLoc, tFrames, comments='%')
+                if fName == 'ang' or fName == 'adx' or fName == 'advel' or fName == 'rod':
+                    skipst = proc_crds[p] * (tFrames[0] - 1)
+                    skipft = proc_crds[p] * (nstps - (tFrames[0]))
+                elif fName == 'agamma_q' or fName == 'gamma_q' or fName == 'gammadot_q':
+                    skipst = proc_elems[p] * (tFrames[0] - 1) * nqpts
+                    skipft = proc_elems[p] * tFrames[0] * nqpts
+                else:
+                    skipst = proc_elems[p] * (tFrames[0] - 1)
+                    skipft = proc_elems[p] * (nstps - (tFrames[0]))
+                    nvals = skipft - skipst
+                nvals = skipft - skipst
+                tmp = np.genfromtxt(fLoc, comments='%', skip_header=skipst, max_rows=nvals)
+#                tmp = selectFrameTxt(fLoc, tFrames, comments='%')
 
             vec = np.atleast_2d(tmp).shape
             if vec[0] == 1:
@@ -745,8 +858,11 @@ def readLOFEMData(fileLoc, nProc, nqpts=15, frames=None, lofemData=None):
                 tName = 'angs'
             else:
                 tName = 'crss'
-            data[tName + '_0'] = np.atleast_3d(temp[:, :, 0])
-            data[tName] = np.atleast_3d(temp[:, :, 1::1])
+            if restart:
+                data[tName] = np.atleast_3d(temp)
+            else: 
+                data[tName + '_0'] = np.atleast_3d(temp[:, :, 0])
+                data[tName] = np.atleast_3d(temp[:, :, 1::1])
 
         elif fName == 'dpeff':
             tName = 'pldefrate'
@@ -755,7 +871,7 @@ def readLOFEMData(fileLoc, nProc, nqpts=15, frames=None, lofemData=None):
         elif fName == 'eqplstrain':
             tName = 'plstrain'
             data[tName] = np.atleast_3d(temp)
-        elif fName == 'agamma' or fName == 'gamma' or fName == 'gammadot_q':
+        elif fName == 'agamma_q' or fName == 'gamma_q' or fName == 'gammadot_q':
             nslip = temp.shape[0]
             nqpts = 15
             nelems = np.int32(temp.shape[1]/nqpts)
@@ -776,9 +892,9 @@ def fixStrain(epsVec):
     
     indices = [0, 1, 2, 1, 3, 4, 2, 4, 5]    
     
-    strain = np.zeros((vec[0], 3, 3))
+    strain = np.zeros((3, 3, vec[1]))
 
-    strain = np.reshape(epsVec[:, indices], (vec[0], 3, 3))
+    strain = np.reshape(epsVec[indices, :], (3, 3, vec[1]))
     
     return strain
         
