@@ -262,10 +262,10 @@ def lofem_elas_stretch_stats(wts, xtalrot_l, xtalrot_d, strain_l, strain_d):
     for i in range(wts.shape[0]):    
         
         xtalrmat = np.squeeze(rot.OrientConvert(xtalrot_l[:, i], 'rod', 'rmat', 'degrees', 'degrees'))
-        velas_l = np.eye(3) +  xtalrmat.dot(strain_l[i, :, :].dot(xtalrmat.T)) #convert strain from lattice to sample
+        velas_l = np.eye(3) +  xtalrmat.dot(strain_l[:, :, i].dot(xtalrmat.T)) #convert strain from lattice to sample
         
         xtalrmat = np.squeeze(rot.OrientConvert(xtalrot_d[:, i], 'kocks', 'rmat', 'degrees', 'degrees'))
-        velas_d = np.eye(3) +  xtalrmat.dot(strain_d[i, :, :].dot(xtalrmat.T))
+        velas_d = np.eye(3) +  xtalrmat.dot(strain_d[:, :, i].dot(xtalrmat.T))
         
         
         vevec_l[0, i] = velas_l[0,0]
@@ -330,11 +330,11 @@ def deformationStats(defgrad, wts, crd, con, misrot, xtalrot, strain, kor):
                      across the mesh
     '''
 
-    vvec = np.zeros((6, defgrad.shape[0]))
-    velasvec = np.zeros((6, defgrad.shape[0]))
-    fvec = np.zeros((9, defgrad.shape[0]))
-    fevec = np.zeros((9, defgrad.shape[0]))
-    rkocks = np.zeros((defgrad.shape[1], defgrad.shape[0]))
+    vvec = np.zeros((6, defgrad.shape[2]))
+    velasvec = np.zeros((6, defgrad.shape[2]))
+    fvec = np.zeros((9, defgrad.shape[2]))
+    fevec = np.zeros((9, defgrad.shape[2]))
+    rkocks = np.zeros((defgrad.shape[0], defgrad.shape[2]))
     
     kocks = rot.OrientConvert(np.eye(3), 'rmat', 'kocks', 'degrees', 'degrees')
     
@@ -342,17 +342,17 @@ def deformationStats(defgrad, wts, crd, con, misrot, xtalrot, strain, kor):
     wts1 = np.tile(wts, (6, 1))
     wts2 = np.tile(wts, (9, 1))
     
-    fvec[0, :] = defgrad[:, 0, 0]
-    fvec[1, :] = defgrad[:, 1, 1]
-    fvec[2, :] = defgrad[:, 2, 2]
+    fvec[0, :] = defgrad[0, 0, :]
+    fvec[1, :] = defgrad[1, 1, :]
+    fvec[2, :] = defgrad[2, 2, :]
     
-    fvec[3, :] = defgrad[:, 1, 2]
-    fvec[4, :] = defgrad[:, 0, 2]
-    fvec[5, :] = defgrad[:, 0, 1]
+    fvec[3, :] = defgrad[1, 2, :]
+    fvec[4, :] = defgrad[0, 2, :]
+    fvec[5, :] = defgrad[0, 1, :]
     
-    fvec[6, :] = defgrad[:, 2, 1]
-    fvec[7, :] = defgrad[:, 2, 0]
-    fvec[8, :] = defgrad[:, 1, 0]
+    fvec[6, :] = defgrad[2, 1, :]
+    fvec[7, :] = defgrad[2, 0, :]
+    fvec[8, :] = defgrad[1, 0, :]
     
 #    V = np.zeros((defgrad.shape[1], defgrad.shape[2], defgrad.shape[0]))
 #    R = np.zeros((defgrad.shape[1], defgrad.shape[2], defgrad.shape[0]))    
@@ -371,9 +371,9 @@ def deformationStats(defgrad, wts, crd, con, misrot, xtalrot, strain, kor):
 #    reye = np.zeros((defgrad.shape[0], 3, 3))
 #    defplgrad = np.zeros((defgrad.shape[0], 3, 3))
 
-    for i in range(defgrad.shape[0]):    
+    for i in range(defgrad.shape[2]):    
         
-        R, V = sci.linalg.polar(defgrad[i, :, :], 'left')
+        R, V = sci.linalg.polar(defgrad[:, :, i], 'left')
         rkocks[:,i] = np.squeeze(rot.OrientConvert(R, 'rmat', 'kocks', 'degrees', 'degrees'))
         
         vvec[0, i] = V[0,0]
@@ -385,7 +385,7 @@ def deformationStats(defgrad, wts, crd, con, misrot, xtalrot, strain, kor):
 
         rxtal = np.squeeze(rot.OrientConvert(misrot[:, i], 'quat', 'rmat', 'degrees', 'degrees'))
         xtalrmat = np.squeeze(rot.OrientConvert(xtalrot[:, i], kor, 'rmat', 'degrees', 'degrees'))
-        velas = np.eye(3) +  xtalrmat.dot(strain[i, :, :].dot(xtalrmat.T)) #convert strain from lattice to sample
+        velas = np.eye(3) +  xtalrmat.dot(strain[:, :, i].dot(xtalrmat.T)) #convert strain from lattice to sample
 
         elasdefgrad = velas.dot(rxtal)
         
@@ -432,22 +432,22 @@ def deformationStats(defgrad, wts, crd, con, misrot, xtalrot, strain, kor):
 #        print(R.shape)
         
     cen = utl.mat2d_row_order(np.sum(velasvec*wts1, axis=1))
-    vi = velasvec - np.tile(cen, (1, defgrad.shape[0]))
+    vi = velasvec - np.tile(cen, (1, defgrad.shape[2]))
     vinv = np.sum(utl.RankOneMatrix(vi*wts1, vi), axis=2)
     vespread = np.atleast_2d(np.sqrt(np.trace(vinv[:, :])))
     
     cen = utl.mat2d_row_order(np.sum(vvec*wts1, axis=1))
-    vi = vvec - np.tile(cen, (1, defgrad.shape[0]))
+    vi = vvec - np.tile(cen, (1, defgrad.shape[2]))
     vinv = np.sum(utl.RankOneMatrix(vi*wts1, vi), axis=2)
     vspread = np.atleast_2d(np.sqrt(np.trace(vinv[:, :])))
     
     cen = utl.mat2d_row_order(np.sum(fvec*wts2, axis=1))
-    vi = fvec - np.tile(cen, (1, defgrad.shape[0]))
+    vi = fvec - np.tile(cen, (1, defgrad.shape[2]))
     vinv = np.sum(utl.RankOneMatrix(vi*wts2, vi), axis=2)
     fSpread = np.atleast_2d(np.sqrt(np.trace(vinv[:, :])))
     
     cen = utl.mat2d_row_order(np.sum(fevec*wts2, axis=1))
-    vi = fevec - np.tile(cen, (1, defgrad.shape[0]))
+    vi = fevec - np.tile(cen, (1, defgrad.shape[2]))
     vinv = np.sum(utl.RankOneMatrix(vi*wts2, vi), axis=2)
     feSpread = np.atleast_2d(np.sqrt(np.trace(vinv[:, :])))
     

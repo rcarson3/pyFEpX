@@ -187,9 +187,9 @@ effStress = np.zeros((nels,nsteps), dtype="float64")
 triax = np.zeros((nels,nsteps), dtype="float64")
 
 for j in range(nsteps):
-    stress = fepxDM.fixStrain(np.squeeze(ldata['stress'][:,:,j]).T)
+    stress = fepxDM.fixStrain(np.squeeze(ldata['stress'][:,:,j]))
     for i in range(nels):
-        mStress[i,j] = 1/3*np.trace(stress[i,:,:])
+        mStress[i,j] = 1/3*np.trace(stress[:,:,i])
         devStress = stress[i,:,:] - mStress[i,j]*np.eye(3)
         effStress[i,j] = np.sqrt(3/2*np.trace(np.dot(devStress,devStress.T)))
         triax[i,j] = mStress[i,j]/effStress[i,j]

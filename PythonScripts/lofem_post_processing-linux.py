@@ -172,7 +172,7 @@ for i in grains:
     #for the discrete method
     misAngs, misQuats = mis.misorientationGrain(mesh['kocks'][:,i-1], data['angs'][:,indlog,:], frames, 'kocks')
     #Legacy code but just setting our deformation gradient to the identity array
-    defgrad = np.swapaxes(np.tile(np.atleast_3d(np.identity(3)), (1,1,nel)), 0, 2)
+    defgrad = np.tile(np.atleast_3d(np.identity(3)), (1,1,nel))
     #A list holding our deformation stats for the discrete and lofem methods
     deflist = []
     ldeflist = []
@@ -214,7 +214,7 @@ for i in grains:
         ldefdata = fe.deformationStats(defgrad, wts, crd, lcon, lemisQuats[:, :, j], el_angs[:,:,j], strain, kor)
         ldeflist.append(ldefdata)
         #Doing the same as the above but now for the discrete data case
-        epsVec = np.squeeze(data['strain'][:, indlog, j]).T
+        epsVec = np.squeeze(data['strain'][:, indlog, j])
         strain = fepxDM.fixStrain(epsVec)
         
         defdata = fe.deformationStats(defgrad, wts, crd, lcon, misQuats[:, :, j], data['angs'][:, indlog, j], strain, 'kocks')
